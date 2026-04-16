@@ -1,0 +1,9 @@
+.next/
+node_modules/
+.env
+.env.local
+.env.production.local
+.vercel/
+.vercel-global/
+.npm-cache/
+npm-debug.log*
