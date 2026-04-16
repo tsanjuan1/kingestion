@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { contactSchema } from "@/lib/contact-schema";
-import { getSupabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin, hasSupabaseAdminConfig } from "@/lib/supabase";
 
 export async function POST(request: Request) {
   let payload: unknown;
@@ -21,6 +21,16 @@ export async function POST(request: Request) {
         issues: parsed.error.flatten().fieldErrors
       },
       { status: 400 }
+    );
+  }
+
+  if (!hasSupabaseAdminConfig()) {
+    return NextResponse.json(
+      {
+        message:
+          "La base de contactos todavia no esta conectada. Falta terminar la vinculacion de Supabase para activar este formulario."
+      },
+      { status: 503 }
     );
   }
 
