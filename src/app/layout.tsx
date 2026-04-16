@@ -16,8 +16,11 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Kingestion",
-  description: "Plataforma para ordenar operacion, seguimiento comercial y control de gestion."
+  title: {
+    default: "Kingestion",
+    template: "%s | Kingestion"
+  },
+  description: "Internal Kingston RMA control desk for case management, workflow tracking and SLA visibility."
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
