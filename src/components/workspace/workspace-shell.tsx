@@ -9,8 +9,10 @@ import { getOwnerInitials } from "@/lib/kingston/helpers";
 
 const navigationItems = [
   { href: "/dashboard", label: "Resumen", hint: "Pantallazo general de la operacion" },
-  { href: "/cases", label: "Casos abiertos", hint: "Seguimiento y avance por etapas" },
-  { href: "/closed-cases", label: "Casos cerrados", hint: "Realizados y cerrados" },
+  { href: "/cases", label: "Casos abiertos", hint: "Bandeja operativa simple" },
+  { href: "/closed-cases", label: "Casos cerrados", hint: "Archivo de realizados y cerrados" },
+  { href: "/search", label: "Busqueda", hint: "Filtros y consultas avanzadas" },
+  { href: "/reimbursements", label: "Reintegros", hint: "Pendientes con comprobantes y cierre" },
   { href: "/reports", label: "Reportes", hint: "Consultas y exportes PDF" },
   { href: "/settings", label: "Configuracion", hint: "Responsables, asignaciones y auditoria" }
 ];
@@ -28,6 +30,8 @@ function getPageLabel(pathname: string) {
   if (pathname.startsWith("/cases/")) return "Detalle del caso";
   if (pathname.startsWith("/cases")) return "Casos abiertos";
   if (pathname.startsWith("/closed-cases")) return "Casos cerrados";
+  if (pathname.startsWith("/search")) return "Busqueda";
+  if (pathname.startsWith("/reimbursements")) return "Reintegros";
   if (pathname.startsWith("/reports")) return "Reportes";
   if (pathname.startsWith("/settings")) return "Configuracion";
   if (pathname.startsWith("/login")) return "Acceso";
@@ -36,11 +40,7 @@ function getPageLabel(pathname: string) {
 }
 
 function getSearchAction(pathname: string) {
-  if (pathname.startsWith("/closed-cases")) {
-    return "/closed-cases";
-  }
-
-  return "/cases";
+  return "/search";
 }
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
@@ -158,7 +158,7 @@ function WorkspaceSearchForm({ action }: { action: string }) {
   return (
     <form action={action} className="workspace-search-form">
       <label htmlFor="workspace-search" className="workspace-topbar-label">
-        Buscar caso
+        Busqueda global
       </label>
       <div className="workspace-search-row">
         <input
@@ -179,7 +179,7 @@ function WorkspaceSearchForm({ action }: { action: string }) {
 function WorkspaceSearchFallback() {
   return (
     <div className="workspace-search-form">
-      <div className="workspace-topbar-label">Buscar caso</div>
+      <div className="workspace-topbar-label">Busqueda global</div>
       <div className="workspace-search-row">
         <input className="workspace-search-input" placeholder="Numero, ticket Kingston, cliente o SKU" />
         <button className="workspace-button" type="button">

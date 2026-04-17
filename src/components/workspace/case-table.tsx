@@ -1,71 +1,63 @@
 import Link from "next/link";
 
-import { StatusPill } from "@/components/workspace/status-pill";
-import {
-  formatDate,
-  getCaseAgingDays,
-  getDeliveryModeLabel,
-  getSlaLabel
-} from "@/lib/kingston/helpers";
-import type { KingstonCase } from "@/lib/kingston/types";
+import { CaseStatusSelect } from "@/components/workspace/case-status-select";
+import { formatDate } from "@/lib/kingston/helpers";
+import type { ExternalStatus, KingstonCase } from "@/lib/kingston/types";
 
 type CaseTableProps = {
   cases: KingstonCase[];
+  emptyLabel?: string;
+  onStatusChange: (caseId: string, status: ExternalStatus) => void;
 };
 
-export function CaseTable({ cases }: CaseTableProps) {
+export function CaseTable({
+  cases,
+  emptyLabel = "No hay casos para mostrar en este modulo.",
+  onStatusChange
+}: CaseTableProps) {
   if (cases.length === 0) {
-    return <div className="workspace-empty">No hay casos para los filtros seleccionados.</div>;
+    return <div className="workspace-empty">{emptyLabel}</div>;
   }
 
   return (
     <div className="workspace-table-wrap">
-      <table className="workspace-table">
+      <table className="workspace-table workspace-case-list-table">
         <thead>
           <tr>
-            <th>Caso</th>
+            <th>Numero de caso</th>
+            <th>Fecha</th>
             <th>Cliente</th>
-            <th>SKU</th>
+            <th>SKU fallado</th>
+            <th>Zona</th>
             <th>Estado</th>
-            <th>Responsable</th>
-            <th>Proxima accion</th>
-            <th>SLA</th>
           </tr>
         </thead>
         <tbody>
           {cases.map((entry) => (
             <tr key={entry.id}>
               <td>
-                <Link className="font-semibold text-white transition hover:text-[#7dd3fc]" href={`/cases/${entry.id}`}>
+                <Link className="workspace-case-link" href={`/cases/${entry.id}`}>
                   {entry.internalNumber}
                 </Link>
-                <div className="mt-1 text-xs uppercase tracking-[0.14em] text-white/38">{entry.kingstonNumber}</div>
+                <div className="workspace-case-meta">{entry.kingstonNumber}</div>
+              </td>
+              <td>
+                <div className="font-medium text-white">{formatDate(entry.openedAt)}</div>
+                <div className="workspace-case-meta">Actualizado {formatDate(entry.updatedAt)}</div>
               </td>
               <td>
                 <div className="font-medium text-white">{entry.clientName}</div>
-                <div className="mt-1 text-sm text-white/58">
-                  {entry.zone} / {getDeliveryModeLabel(entry.deliveryMode)}
-                </div>
+                <div className="workspace-case-meta">{entry.owner}</div>
               </td>
               <td>
                 <div className="font-medium text-white">{entry.sku}</div>
-                <div className="mt-1 text-sm text-white/58">
-                  {entry.quantity} un. / {getCaseAgingDays(entry)} dias
-                </div>
+                <div className="workspace-case-meta">{entry.productDescription}</div>
               </td>
               <td>
-                <StatusPill kind="status" value={entry.externalStatus} />
-                <div className="mt-2 text-sm text-white/58">{entry.internalSubstatus}</div>
+                <div className="font-medium text-white">{entry.zone}</div>
               </td>
               <td>
-                <div className="font-medium text-white">{entry.owner}</div>
-                <div className="mt-1 text-sm text-white/58">Actualizado {formatDate(entry.updatedAt)}</div>
-              </td>
-              <td>
-                <div className="max-w-[18rem] text-sm leading-7 text-white/74">{entry.nextAction}</div>
-              </td>
-              <td>
-                <StatusPill kind="sla" value={entry.slaDueAt} label={getSlaLabel(entry.slaDueAt)} />
+                <CaseStatusSelect value={entry.externalStatus} onChange={(status) => onStatusChange(entry.id, status)} />
               </td>
             </tr>
           ))}

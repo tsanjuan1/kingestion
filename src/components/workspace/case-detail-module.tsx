@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 
@@ -42,12 +42,23 @@ function getTab(value: string | null): DetailTab {
   }
 }
 
+function formatUploadSize(size: number) {
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
 export function CaseDetailModule() {
   const params = useParams<{ caseId: string }>();
   const searchParams = useSearchParams();
   const tab = getTab(searchParams.get("tab"));
   const hasLoggedView = useRef(false);
-  const { findCaseById, activeOwners, assignCaseOwner, updateCaseStatus, auditLog, recordCaseView } =
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [attachmentSuccess, setAttachmentSuccess] = useState<string | null>(null);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const { findCaseById, activeOwners, assignCaseOwner, updateCaseStatus, addCaseAttachment, auditLog, recordCaseView } =
     useKingestion();
   const entry = findCaseById(params.caseId);
 
@@ -77,6 +88,62 @@ export function CaseDetailModule() {
   }));
   const caseAudit = auditLog.filter((item) => item.entityType === "case" && item.entityId === entry.id).slice(0, 10);
   const banking = entry.banking;
+  const proofAttachments = entry.attachments.filter(
+    (attachment) => attachment.kind === "proof" || attachment.kind === "photo"
+  );
+  const latestProofAttachment = proofAttachments[0] ?? null;
+
+  const handleProofUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    setAttachmentError(null);
+    setAttachmentSuccess(null);
+
+    if (!file.type.startsWith("image/")) {
+      setAttachmentError("Solo se pueden cargar imagenes para el comprobante del cliente.");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setAttachmentError("La imagen no puede superar los 2 MB para mantener la app liviana.");
+      return;
+    }
+
+    setIsUploadingAttachment(true);
+
+    try {
+      const previewUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("No pude leer la imagen."));
+        reader.readAsDataURL(file);
+      });
+
+      const saved = addCaseAttachment(entry.id, {
+        name: file.name,
+        kind: "proof",
+        sizeLabel: formatUploadSize(file.size),
+        mimeType: file.type,
+        previewUrl
+      });
+
+      if (!saved) {
+        setAttachmentError("No pude guardar el comprobante en este caso.");
+        return;
+      }
+
+      setAttachmentSuccess("Comprobante cargado correctamente.");
+    } catch {
+      setAttachmentError("No pude procesar la imagen. Probá con otro archivo.");
+    } finally {
+      setIsUploadingAttachment(false);
+    }
+  };
 
   return (
     <div className="workspace-page">
@@ -335,47 +402,115 @@ export function CaseDetailModule() {
       ) : null}
 
       {tab === "operacion" ? (
-        <div className="workspace-grid-2">
-          <SectionPanel title="Logistica" description="Retiro, envio, guia, tracking y entrega final.">
-            <dl className="workspace-data-list">
-              <div className="workspace-data-item">
-                <dt>Modalidad</dt>
-                <dd>{getDeliveryModeLabel(entry.logistics.mode)}</dd>
-              </div>
-              <div className="workspace-data-item">
-                <dt>Direccion logistica</dt>
-                <dd>{entry.logistics.address}</dd>
-              </div>
-              <div className="workspace-data-item">
-                <dt>Transportista</dt>
-                <dd>{entry.logistics.transporter ?? "Pendiente"}</dd>
-              </div>
-              <div className="workspace-data-item">
-                <dt>Numero de guia</dt>
-                <dd>{entry.logistics.guideNumber ?? "Sin cargar"}</dd>
-              </div>
-              <div className="workspace-data-item">
-                <dt>Tracking</dt>
-                <dd>{entry.logistics.trackingUrl ?? "Sin informar"}</dd>
-              </div>
-              <div className="workspace-data-item">
-                <dt>Despacho / entrega</dt>
-                <dd>
-                  {(entry.logistics.dispatchDate && formatDateTime(entry.logistics.dispatchDate)) ?? "Sin despacho"} /{" "}
-                  {(entry.logistics.deliveredDate && formatDateTime(entry.logistics.deliveredDate)) ?? "Sin entrega"}
-                </dd>
-              </div>
-              <div className="workspace-data-item">
-                <dt>Reintegro</dt>
-                <dd>{getReimbursementStateLabel(entry.logistics.reimbursementState)}</dd>
-              </div>
-            </dl>
-          </SectionPanel>
+        <>
+          <div className="workspace-grid-2">
+            <SectionPanel title="Logistica" description="Retiro, envio, guia, tracking y entrega final.">
+              <dl className="workspace-data-list">
+                <div className="workspace-data-item">
+                  <dt>Modalidad</dt>
+                  <dd>{getDeliveryModeLabel(entry.logistics.mode)}</dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Direccion logistica</dt>
+                  <dd>{entry.logistics.address}</dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Transportista</dt>
+                  <dd>{entry.logistics.transporter ?? "Pendiente"}</dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Numero de guia</dt>
+                  <dd>{entry.logistics.guideNumber ?? "Sin cargar"}</dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Tracking</dt>
+                  <dd>{entry.logistics.trackingUrl ?? "Sin informar"}</dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Despacho / entrega</dt>
+                  <dd>
+                    {(entry.logistics.dispatchDate && formatDateTime(entry.logistics.dispatchDate)) ?? "Sin despacho"} /{" "}
+                    {(entry.logistics.deliveredDate && formatDateTime(entry.logistics.deliveredDate)) ?? "Sin entrega"}
+                  </dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Reintegro</dt>
+                  <dd>{getReimbursementStateLabel(entry.logistics.reimbursementState)}</dd>
+                </div>
+              </dl>
+            </SectionPanel>
 
-          <SectionPanel title="Tareas del caso" description="Trabajo activo asociado a esta operacion.">
-            <TaskList tasks={taskItems} emptyLabel="No hay tareas abiertas para este caso." />
+            <SectionPanel title="Tareas del caso" description="Trabajo activo asociado a esta operacion.">
+              <TaskList tasks={taskItems} emptyLabel="No hay tareas abiertas para este caso." />
+            </SectionPanel>
+          </div>
+
+          <SectionPanel
+            title="Comprobante del cliente"
+            description="Carga de imagen para el comprobante y acceso rapido a los datos del cliente para reintegros."
+          >
+            <div className="workspace-grid-2">
+              <div className="workspace-inline-form">
+                <div className="workspace-data-list">
+                  <div className="workspace-data-item">
+                    <dt>Estado del reintegro</dt>
+                    <dd>{getReimbursementStateLabel(entry.logistics.reimbursementState)}</dd>
+                  </div>
+                  <div className="workspace-data-item">
+                    <dt>Cliente</dt>
+                    <dd>
+                      {entry.clientName} / {entry.contactName}
+                    </dd>
+                  </div>
+                  <div className="workspace-data-item">
+                    <dt>Banco</dt>
+                    <dd>{banking ? `${banking.bankName} / ${banking.alias}` : "Sin datos bancarios cargados."}</dd>
+                  </div>
+                </div>
+
+                <label className="workspace-label">
+                  <span>Imagen del comprobante</span>
+                  <input
+                    className="workspace-file-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleProofUpload}
+                    disabled={isUploadingAttachment}
+                  />
+                </label>
+
+                {attachmentError ? <div className="workspace-empty">{attachmentError}</div> : null}
+                {attachmentSuccess ? <div className="workspace-empty">{attachmentSuccess}</div> : null}
+
+                <div className="workspace-inline-actions">
+                  <Link className="workspace-button-secondary" href={`/cases/${entry.id}?tab=cliente`}>
+                    Ver datos del cliente
+                  </Link>
+                  <Link className="workspace-button-secondary" href="/reimbursements">
+                    Ir a reintegros
+                  </Link>
+                </div>
+              </div>
+
+              <div>
+                {latestProofAttachment?.previewUrl ? (
+                  <div className="workspace-proof-preview">
+                    <img
+                      src={latestProofAttachment.previewUrl}
+                      alt={`Comprobante ${latestProofAttachment.name}`}
+                      className="workspace-proof-image"
+                    />
+                    <div className="workspace-case-meta">
+                      {latestProofAttachment.name} / {formatDateTime(latestProofAttachment.createdAt)}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="workspace-empty">Todavia no hay imagen de comprobante cargada en este caso.</div>
+                )}
+              </div>
+            </div>
           </SectionPanel>
-        </div>
+        </>
       ) : null}
 
       {tab === "historial" ? (
@@ -392,6 +527,15 @@ export function CaseDetailModule() {
                       <div className="mt-1 text-sm text-white/58">
                         {getAttachmentKindLabel(attachment.kind)} / {attachment.sizeLabel}
                       </div>
+                      {attachment.previewUrl ? (
+                        <div className="workspace-proof-preview mt-3">
+                          <img
+                            src={attachment.previewUrl}
+                            alt={`Adjunto ${attachment.name}`}
+                            className="workspace-proof-image"
+                          />
+                        </div>
+                      ) : null}
                       <div className="mt-2 text-xs uppercase tracking-[0.16em] text-white/40">
                         {attachment.uploadedBy} / {formatDateTime(attachment.createdAt)}
                       </div>

@@ -13,6 +13,7 @@ import {
   getReportsSnapshot
 } from "@/lib/kingston/helpers";
 import type {
+  CaseAttachment,
   CasePriority,
   CaseEvent,
   ClientBankingDetails,
@@ -67,17 +68,28 @@ type CreateCaseInput = {
   attachmentNames?: string[];
 };
 
+type CaseAttachmentInput = {
+  name: string;
+  kind: CaseAttachment["kind"];
+  sizeLabel: string;
+  mimeType?: string;
+  previewUrl?: string;
+};
+
 type KingestionContextValue = WorkspaceState & {
   activeOwner: OwnerDirectoryEntry | null;
   openCases: KingstonCase[];
   closedCases: KingstonCase[];
   activeOwners: OwnerDirectoryEntry[];
+  canManageReimbursements: boolean;
   dashboardSnapshot: ReturnType<typeof getDashboardSnapshot>;
   reportsSnapshot: ReturnType<typeof getReportsSnapshot>;
   findCaseById: (caseId: string) => KingstonCase | undefined;
   setActiveOwner: (ownerId: string) => void;
   setThemeMode: (themeMode: ThemeMode) => void;
   createCase: (input: CreateCaseInput) => string;
+  addCaseAttachment: (caseId: string, input: CaseAttachmentInput) => boolean;
+  completeReimbursement: (caseId: string) => boolean;
   createOwner: (input: OwnerInput) => void;
   updateOwner: (ownerId: string, input: OwnerInput) => void;
   deleteOwner: (ownerId: string) => void;
@@ -439,6 +451,10 @@ function inferAttachmentKind(name: string): KingstonCase["attachments"][number][
   return "proof";
 }
 
+function canManageReimbursementForOwner(owner: OwnerDirectoryEntry | null) {
+  return owner?.team === "Management" || owner?.team === "Purchasing";
+}
+
 function normalizeOwner(owner: OwnerDirectoryEntry): OwnerDirectoryEntry {
   return {
     ...owner,
@@ -586,6 +602,10 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
       state.owners.find((owner) => owner.active) ??
       null,
     [state.activeOwnerId, state.owners]
+  );
+  const canManageReimbursements = useMemo(
+    () => canManageReimbursementForOwner(activeOwner),
+    [activeOwner]
   );
 
   const openCases = useMemo(() => getOpenCases(state.cases), [state.cases]);
@@ -804,6 +824,133 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
     });
 
     return caseId;
+  };
+
+  const addCaseAttachment = (caseId: string, input: CaseAttachmentInput) => {
+    const targetCase = state.cases.find((entry) => entry.id === caseId);
+    if (!targetCase) {
+      return false;
+    }
+
+    setState((currentState) => {
+      const actor = resolveActor(currentState);
+      const actorName = actor?.name ?? "Sesion sin responsable activo";
+      const now = new Date().toISOString();
+
+      const nextCases: KingstonCase[] = currentState.cases.map((entry): KingstonCase => {
+        if (entry.id !== caseId) {
+          return entry;
+        }
+
+        const nextAttachment: CaseAttachment = {
+          id: createId("attachment"),
+          name: input.name.trim(),
+          kind: input.kind,
+          sizeLabel: input.sizeLabel,
+          uploadedBy: actorName,
+          createdAt: now,
+          mimeType: input.mimeType,
+          previewUrl: input.previewUrl
+        };
+
+        const nextEvent: CaseEvent = {
+          id: createId("event"),
+          kind: "attachment",
+          title: "Adjunto cargado",
+          detail: `${nextAttachment.name} se sumo al caso.`,
+          actor: actorName,
+          createdAt: now
+        };
+        const reimbursementState: KingstonCase["logistics"]["reimbursementState"] =
+          nextAttachment.kind === "proof" && entry.logistics.reimbursementState === "Pending"
+            ? "Requested"
+            : entry.logistics.reimbursementState;
+
+        return {
+          ...entry,
+          updatedAt: now,
+          attachments: [nextAttachment, ...entry.attachments],
+          logistics: {
+            ...entry.logistics,
+            reimbursementState
+          },
+          events: [nextEvent, ...entry.events]
+        };
+      });
+
+      return appendAuditLog(
+        {
+          ...currentState,
+          cases: nextCases
+        },
+        actor,
+        {
+          entityType: "case",
+          entityId: caseId,
+          action: "case-attachment-added",
+          detail: `${targetCase.internalNumber} recibio el adjunto ${input.name.trim()}.`
+        }
+      );
+    });
+
+    return true;
+  };
+
+  const completeReimbursement = (caseId: string) => {
+    if (!canManageReimbursementForOwner(activeOwner)) {
+      return false;
+    }
+
+    const targetCase = state.cases.find((entry) => entry.id === caseId);
+    if (!targetCase) {
+      return false;
+    }
+
+    setState((currentState) => {
+      const actor = resolveActor(currentState);
+      const now = new Date().toISOString();
+
+      const nextCases: KingstonCase[] = currentState.cases.map((entry): KingstonCase => {
+        if (entry.id !== caseId) {
+          return entry;
+        }
+
+        const nextEvent: CaseEvent = {
+          id: createId("event"),
+          kind: "logistics",
+          title: "Reintegro completado",
+          detail: "El reintegro quedo marcado como completado.",
+          actor: actor?.name ?? "Sesion sin responsable activo",
+          createdAt: now
+        };
+
+        return {
+          ...entry,
+          updatedAt: now,
+          logistics: {
+            ...entry.logistics,
+            reimbursementState: "Completed" as KingstonCase["logistics"]["reimbursementState"]
+          },
+          events: [nextEvent, ...entry.events]
+        };
+      });
+
+      return appendAuditLog(
+        {
+          ...currentState,
+          cases: nextCases
+        },
+        actor,
+        {
+          entityType: "case",
+          entityId: caseId,
+          action: "case-reimbursement-completed",
+          detail: `Se completo el reintegro de ${targetCase.internalNumber}.`
+        }
+      );
+    });
+
+    return true;
   };
 
   const createOwner = (input: OwnerInput) => {
@@ -1079,6 +1226,7 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
       openCases,
       closedCases,
       activeOwners,
+      canManageReimbursements,
       themeMode: state.themeMode,
       dashboardSnapshot,
       reportsSnapshot,
@@ -1086,6 +1234,8 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
       setActiveOwner,
       setThemeMode,
       createCase,
+      addCaseAttachment,
+      completeReimbursement,
       createOwner,
       updateOwner,
       deleteOwner,
@@ -1100,6 +1250,7 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
       openCases,
       closedCases,
       activeOwners,
+      canManageReimbursements,
       dashboardSnapshot,
       reportsSnapshot
     ]

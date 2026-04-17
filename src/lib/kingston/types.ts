@@ -70,6 +70,8 @@ export type CaseAttachment = {
   sizeLabel: string;
   uploadedBy: string;
   createdAt: string;
+  mimeType?: string;
+  previewUrl?: string;
 };
 
 export type ClientBankingDetails = {

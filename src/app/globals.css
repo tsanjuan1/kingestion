@@ -320,6 +320,13 @@ textarea {
   transform: translateY(-1px);
 }
 
+.workspace-button:disabled,
+.workspace-button-secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
 .workspace-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -532,6 +539,124 @@ textarea {
   color: var(--muted-quiet);
 }
 
+.workspace-case-list-table td {
+  padding-top: 0.9rem;
+  padding-bottom: 0.9rem;
+}
+
+.workspace-case-list-table td:last-child {
+  min-width: 14rem;
+}
+
+.workspace-status-select {
+  width: 100%;
+  min-height: 2.7rem;
+  border-radius: 0.9rem;
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+  color: var(--text);
+  padding: 0 0.85rem;
+}
+
+.workspace-status-select:focus,
+.workspace-file-input:focus {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.34);
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.08);
+}
+
+.workspace-status-select-neutral {
+  border-color: var(--line);
+}
+
+.workspace-status-select-accent {
+  border-color: rgba(56, 189, 248, 0.28);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.workspace-status-select-danger {
+  border-color: rgba(251, 113, 133, 0.28);
+  background: rgba(251, 113, 133, 0.08);
+}
+
+.workspace-status-select-warning {
+  border-color: rgba(251, 191, 36, 0.28);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.workspace-status-select-success {
+  border-color: rgba(74, 222, 128, 0.28);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.workspace-file-input {
+  width: 100%;
+  border-radius: 0.95rem;
+  border: 1px dashed var(--line-strong);
+  background: var(--panel-soft);
+  color: var(--muted-strong);
+  padding: 0.85rem 0.95rem;
+}
+
+.workspace-proof-preview {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.workspace-proof-image {
+  width: 100%;
+  max-height: 18rem;
+  object-fit: cover;
+  border-radius: 1rem;
+  border: 1px solid var(--line);
+}
+
+.workspace-reimbursements-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.workspace-reimbursement-card {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
+  border: 1px solid var(--line);
+  border-radius: 1.2rem;
+  background: rgba(148, 163, 184, 0.04);
+  padding: 1rem;
+}
+
+.workspace-reimbursement-main {
+  display: grid;
+  gap: 1rem;
+}
+
+.workspace-reimbursement-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.workspace-reimbursement-title {
+  margin: 0.2rem 0 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.workspace-reimbursement-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspace-reimbursement-proof {
+  display: grid;
+  gap: 0.75rem;
+}
+
 .workspace-list-card {
   display: block;
   border: 1px solid var(--line);
@@ -724,7 +849,9 @@ html[data-theme="light"] .workspace-shell .workspace-link-button-danger {
   .workspace-grid-4,
   .workspace-grid-3,
   .workspace-grid-2,
-  .workspace-form-grid {
+  .workspace-form-grid,
+  .workspace-reimbursement-card,
+  .workspace-reimbursement-grid {
     grid-template-columns: 1fr;
   }
 

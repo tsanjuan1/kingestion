@@ -200,6 +200,10 @@ export function getAuditActionLabel(action: string) {
   switch (action) {
     case "case-created":
       return "Alta de caso";
+    case "case-attachment-added":
+      return "Adjunto cargado";
+    case "case-reimbursement-completed":
+      return "Reintegro completado";
     case "owner-created":
       return "Alta de responsable";
     case "owner-updated":
@@ -292,6 +296,13 @@ export function getOpenCases(cases: KingstonCase[] = kingstonCases) {
 
 export function getClosedCases(cases: KingstonCase[] = kingstonCases) {
   return cases.filter((entry) => isClosedCaseStatus(entry.externalStatus));
+}
+
+export function getPendingReimbursements(cases: KingstonCase[] = kingstonCases) {
+  return getOpenCases(cases).filter(
+    (entry) =>
+      entry.logistics.reimbursementState === "Pending" || entry.logistics.reimbursementState === "Requested"
+  );
 }
 
 export function flattenTasks(cases: KingstonCase[] = kingstonCases) {
