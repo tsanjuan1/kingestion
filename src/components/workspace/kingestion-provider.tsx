@@ -21,7 +21,7 @@ import type {
   UserInteractionLog
 } from "@/lib/kingston/types";
 
-const STORAGE_KEY = "kingestion.workspace.v4";
+const STORAGE_KEY = "kingestion.workspace.v3";
 export type ThemeMode = "light" | "dark";
 
 type WorkspaceState = {
