@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
+import { useKingestion } from "@/components/workspace/kingestion-provider";
 import { ModuleSubnav } from "@/components/workspace/module-subnav";
 import { SectionPanel } from "@/components/workspace/section-panel";
-import { useKingestion } from "@/components/workspace/kingestion-provider";
 import { workflowStates } from "@/lib/kingston/data";
+import type { CasePriority, DeliveryMode, ExternalStatus, KingstonCase, Zone } from "@/lib/kingston/types";
 
 type DraftCase = {
   kingstonNumber: string;
@@ -15,41 +17,141 @@ type DraftCase = {
   email: string;
   phone: string;
   owner: string;
-  status: string;
-  zone: string;
-  delivery: string;
+  status: ExternalStatus;
+  zone: Zone;
+  delivery: DeliveryMode;
+  priority: CasePriority;
+  origin: KingstonCase["origin"];
+  address: string;
+  province: string;
+  city: string;
   sku: string;
   quantity: string;
   productDescription: string;
   failureDescription: string;
   nextAction: string;
   notes: string;
+  bankName: string;
+  accountHolder: string;
+  cuit: string;
+  cbu: string;
+  alias: string;
+  accountNumber: string;
+  attachments: string;
 };
 
-const initialDraft: DraftCase = {
-  kingstonNumber: "KS-",
-  clientName: "Cliente sin definir",
-  contactName: "Contacto sin definir",
-  email: "contacto@cliente.com",
-  phone: "+54",
-  owner: "",
-  status: "Informado",
-  zone: "Interior / Gran Buenos Aires",
-  delivery: "Dispatch",
-  sku: "SKU pendiente",
-  quantity: "1",
-  productDescription: "Descripcion pendiente",
-  failureDescription: "Sin descripcion de falla",
-  nextAction: "Validar zona, confirmar alta y enviar primera comunicacion.",
-  notes: "Sin observaciones cargadas."
-};
+function getInitialDraft(ownerName?: string): DraftCase {
+  return {
+    kingstonNumber: "KS-",
+    clientName: "",
+    contactName: "",
+    email: "",
+    phone: "+54",
+    owner: ownerName ?? "Sin asignar",
+    status: "Informado",
+    zone: "Interior / Gran Buenos Aires",
+    delivery: "Dispatch",
+    priority: "Medium",
+    origin: "Kingston email",
+    address: "",
+    province: "",
+    city: "",
+    sku: "",
+    quantity: "1",
+    productDescription: "",
+    failureDescription: "",
+    nextAction: "Validar zona, confirmar alta y enviar primera comunicacion.",
+    notes: "",
+    bankName: "",
+    accountHolder: "",
+    cuit: "",
+    cbu: "",
+    alias: "",
+    accountNumber: "",
+    attachments: ""
+  };
+}
 
 export default function NewCasePage() {
-  const { activeOwners, activeOwner } = useKingestion();
-  const [draft, setDraft] = useState<DraftCase>(() => ({
-    ...initialDraft,
-    owner: activeOwner?.name ?? activeOwners[0]?.name ?? "Sin asignar"
-  }));
+  const router = useRouter();
+  const { activeOwners, activeOwner, createCase } = useKingestion();
+  const [draft, setDraft] = useState<DraftCase>(() => getInitialDraft(activeOwner?.name));
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    const quantity = Number.parseInt(draft.quantity, 10);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setError("La cantidad tiene que ser un numero mayor a cero.");
+      return;
+    }
+
+    const requiredValues = [
+      draft.kingstonNumber,
+      draft.clientName,
+      draft.contactName,
+      draft.email,
+      draft.phone,
+      draft.address,
+      draft.province,
+      draft.city,
+      draft.sku,
+      draft.productDescription,
+      draft.failureDescription
+    ];
+
+    if (requiredValues.some((value) => value.trim().length === 0)) {
+      setError("Completá los datos principales del caso antes de guardarlo.");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const caseId = createCase({
+        kingstonNumber: draft.kingstonNumber,
+        clientName: draft.clientName,
+        contactName: draft.contactName,
+        contactEmail: draft.email,
+        contactPhone: draft.phone,
+        owner: draft.owner,
+        externalStatus: draft.status,
+        zone: draft.zone,
+        deliveryMode: draft.delivery,
+        priority: draft.priority,
+        address: draft.address,
+        province: draft.province,
+        city: draft.city,
+        sku: draft.sku,
+        quantity,
+        productDescription: draft.productDescription,
+        failureDescription: draft.failureDescription,
+        nextAction: draft.nextAction,
+        observations: draft.notes,
+        origin: draft.origin,
+        banking: {
+          bankName: draft.bankName,
+          accountHolder: draft.accountHolder,
+          cuit: draft.cuit,
+          cbu: draft.cbu,
+          alias: draft.alias,
+          accountNumber: draft.accountNumber
+        },
+        attachmentNames: draft.attachments
+          .split("\n")
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+      });
+
+      router.push(`/cases/${caseId}`);
+    } catch {
+      setIsSaving(false);
+      setError("No pude guardar el caso. Probá de nuevo y, si sigue fallando, lo reviso.");
+    }
+  };
 
   return (
     <div className="workspace-page">
@@ -61,13 +163,16 @@ export default function NewCasePage() {
           </div>
 
           <div className="workspace-chip-row">
+            <button className="workspace-button" type="submit" form="new-case-form" disabled={isSaving}>
+              {isSaving ? "Guardando..." : "Guardar caso"}
+            </button>
             <Link className="workspace-button-secondary" href="/cases">
               Volver a la bandeja
             </Link>
           </div>
         </div>
         <p className="workspace-subtitle">
-          Formulario preliminar para definir el alta. Queda como vista previa mientras terminamos el guardado real.
+          Alta operativa completa con guardado real dentro del workspace actual. Al guardar se abre el detalle del caso.
         </p>
       </header>
 
@@ -79,105 +184,363 @@ export default function NewCasePage() {
       />
 
       <div className="workspace-grid-2">
-        <SectionPanel title="Carga inicial" description="Campos base para empezar la operacion.">
-          <form className="workspace-inline-form">
-            <div className="workspace-form-grid">
-              <label className="workspace-label">
-                <span>Numero Kingston</span>
-                <input className="workspace-input" value={draft.kingstonNumber} onChange={(event) => setDraft((current) => ({ ...current, kingstonNumber: event.target.value }))} />
-              </label>
-              <label className="workspace-label">
-                <span>Cliente</span>
-                <input className="workspace-input" value={draft.clientName} onChange={(event) => setDraft((current) => ({ ...current, clientName: event.target.value }))} />
-              </label>
-              <label className="workspace-label">
-                <span>Contacto</span>
-                <input className="workspace-input" value={draft.contactName} onChange={(event) => setDraft((current) => ({ ...current, contactName: event.target.value }))} />
-              </label>
-              <label className="workspace-label">
-                <span>Email</span>
-                <input className="workspace-input" value={draft.email} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} />
-              </label>
-              <label className="workspace-label">
-                <span>Telefono</span>
-                <input className="workspace-input" value={draft.phone} onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))} />
-              </label>
-              <label className="workspace-label">
-                <span>Responsable</span>
-                <select className="workspace-select" value={draft.owner} onChange={(event) => setDraft((current) => ({ ...current, owner: event.target.value }))}>
-                  {activeOwners.map((owner) => (
-                    <option key={owner.id} value={owner.name}>
-                      {owner.name}
-                    </option>
-                  ))}
-                  <option value="Sin asignar">Sin asignar</option>
-                </select>
-              </label>
-              <label className="workspace-label">
-                <span>Estado inicial</span>
-                <select className="workspace-select" value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
-                  {workflowStates.map((state) => (
-                    <option key={state.status} value={state.status}>
-                      {state.status}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="workspace-label">
-                <span>Zona</span>
-                <select className="workspace-select" value={draft.zone} onChange={(event) => setDraft((current) => ({ ...current, zone: event.target.value }))}>
-                  <option value="Interior / Gran Buenos Aires">Interior / Gran Buenos Aires</option>
-                  <option value="Capital / AMBA">Capital / AMBA</option>
-                </select>
-              </label>
-              <label className="workspace-label">
-                <span>Modalidad</span>
-                <select className="workspace-select" value={draft.delivery} onChange={(event) => setDraft((current) => ({ ...current, delivery: event.target.value }))}>
-                  <option value="Dispatch">Envio</option>
-                  <option value="Pickup">Retiro</option>
-                </select>
-              </label>
-              <label className="workspace-label">
-                <span>SKU</span>
-                <input className="workspace-input" value={draft.sku} onChange={(event) => setDraft((current) => ({ ...current, sku: event.target.value }))} />
-              </label>
-              <label className="workspace-label">
-                <span>Cantidad</span>
-                <input className="workspace-input" value={draft.quantity} onChange={(event) => setDraft((current) => ({ ...current, quantity: event.target.value }))} />
-              </label>
-              <label className="workspace-label">
-                <span>Descripcion del producto</span>
-                <input className="workspace-input" value={draft.productDescription} onChange={(event) => setDraft((current) => ({ ...current, productDescription: event.target.value }))} />
-              </label>
+        <SectionPanel title="Alta operativa" description="Datos del caso, cliente, operacion y bancarios necesarios para empezar a trabajarlo.">
+          <form id="new-case-form" className="workspace-inline-form" onSubmit={handleSubmit}>
+            <div className="space-y-5">
+              <div>
+                <p className="workspace-kicker">Caso y contacto</p>
+                <div className="workspace-form-grid mt-4">
+                  <label className="workspace-label">
+                    <span>Numero Kingston</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.kingstonNumber}
+                      onChange={(event) => setDraft((current) => ({ ...current, kingstonNumber: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Cliente</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.clientName}
+                      onChange={(event) => setDraft((current) => ({ ...current, clientName: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Contacto</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.contactName}
+                      onChange={(event) => setDraft((current) => ({ ...current, contactName: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Email</span>
+                    <input
+                      className="workspace-input"
+                      type="email"
+                      value={draft.email}
+                      onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Telefono</span>
+                    <input
+                      className="workspace-input"
+                      type="tel"
+                      value={draft.phone}
+                      onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Responsable</span>
+                    <select
+                      className="workspace-select"
+                      value={draft.owner}
+                      onChange={(event) => setDraft((current) => ({ ...current, owner: event.target.value }))}
+                    >
+                      {activeOwners.map((owner) => (
+                        <option key={owner.id} value={owner.name}>
+                          {owner.name}
+                        </option>
+                      ))}
+                      <option value="Sin asignar">Sin asignar</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div className="border-t border-white/8 pt-5">
+                <p className="workspace-kicker">Operacion</p>
+                <div className="workspace-form-grid mt-4">
+                  <label className="workspace-label">
+                    <span>Estado inicial</span>
+                    <select
+                      className="workspace-select"
+                      value={draft.status}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, status: event.target.value as ExternalStatus }))
+                      }
+                    >
+                      {workflowStates.map((state) => (
+                        <option key={state.status} value={state.status}>
+                          {state.status}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="workspace-label">
+                    <span>Prioridad</span>
+                    <select
+                      className="workspace-select"
+                      value={draft.priority}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, priority: event.target.value as CasePriority }))
+                      }
+                    >
+                      <option value="Low">Baja</option>
+                      <option value="Medium">Media</option>
+                      <option value="High">Alta</option>
+                      <option value="Critical">Critica</option>
+                    </select>
+                  </label>
+                  <label className="workspace-label">
+                    <span>Zona</span>
+                    <select
+                      className="workspace-select"
+                      value={draft.zone}
+                      onChange={(event) => setDraft((current) => ({ ...current, zone: event.target.value as Zone }))}
+                    >
+                      <option value="Interior / Gran Buenos Aires">Interior / Gran Buenos Aires</option>
+                      <option value="Capital / AMBA">Capital / AMBA</option>
+                    </select>
+                  </label>
+                  <label className="workspace-label">
+                    <span>Modalidad</span>
+                    <select
+                      className="workspace-select"
+                      value={draft.delivery}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, delivery: event.target.value as DeliveryMode }))
+                      }
+                    >
+                      <option value="Dispatch">Envio</option>
+                      <option value="Pickup">Retiro</option>
+                    </select>
+                  </label>
+                  <label className="workspace-label">
+                    <span>Origen</span>
+                    <select
+                      className="workspace-select"
+                      value={draft.origin}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          origin: event.target.value as KingstonCase["origin"]
+                        }))
+                      }
+                    >
+                      <option value="Kingston email">Correo de Kingston</option>
+                      <option value="Operations load">Carga de operaciones</option>
+                      <option value="Commercial handoff">Pase comercial</option>
+                    </select>
+                  </label>
+                  <label className="workspace-label">
+                    <span>SKU</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.sku}
+                      onChange={(event) => setDraft((current) => ({ ...current, sku: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Cantidad</span>
+                    <input
+                      className="workspace-input"
+                      type="number"
+                      min={1}
+                      value={draft.quantity}
+                      onChange={(event) => setDraft((current) => ({ ...current, quantity: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Descripcion del producto</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.productDescription}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, productDescription: event.target.value }))
+                      }
+                      required
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Direccion exacta</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.address}
+                      onChange={(event) => setDraft((current) => ({ ...current, address: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Provincia</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.province}
+                      onChange={(event) => setDraft((current) => ({ ...current, province: event.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Localidad</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.city}
+                      onChange={(event) => setDraft((current) => ({ ...current, city: event.target.value }))}
+                      required
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="border-t border-white/8 pt-5">
+                <p className="workspace-kicker">Detalle y soporte</p>
+
+                <label className="workspace-label mt-4">
+                  <span>Proxima accion</span>
+                  <input
+                    className="workspace-input"
+                    value={draft.nextAction}
+                    onChange={(event) => setDraft((current) => ({ ...current, nextAction: event.target.value }))}
+                  />
+                </label>
+
+                <label className="workspace-label mt-4">
+                  <span>Descripcion de la falla</span>
+                  <textarea
+                    className="workspace-textarea"
+                    value={draft.failureDescription}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, failureDescription: event.target.value }))
+                    }
+                    required
+                  />
+                </label>
+
+                <label className="workspace-label mt-4">
+                  <span>Observaciones internas</span>
+                  <textarea
+                    className="workspace-textarea"
+                    value={draft.notes}
+                    onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
+                  />
+                </label>
+
+                <div className="workspace-form-grid mt-4">
+                  <label className="workspace-label">
+                    <span>Banco</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.bankName}
+                      onChange={(event) => setDraft((current) => ({ ...current, bankName: event.target.value }))}
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Titular</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.accountHolder}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, accountHolder: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>CUIT</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.cuit}
+                      onChange={(event) => setDraft((current) => ({ ...current, cuit: event.target.value }))}
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>CBU</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.cbu}
+                      onChange={(event) => setDraft((current) => ({ ...current, cbu: event.target.value }))}
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Alias</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.alias}
+                      onChange={(event) => setDraft((current) => ({ ...current, alias: event.target.value }))}
+                    />
+                  </label>
+                  <label className="workspace-label">
+                    <span>Nro. de cuenta</span>
+                    <input
+                      className="workspace-input"
+                      value={draft.accountNumber}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, accountNumber: event.target.value }))
+                      }
+                    />
+                  </label>
+                </div>
+
+                <label className="workspace-label mt-4">
+                  <span>Adjuntos iniciales</span>
+                  <textarea
+                    className="workspace-textarea"
+                    value={draft.attachments}
+                    onChange={(event) => setDraft((current) => ({ ...current, attachments: event.target.value }))}
+                    placeholder={"Un archivo por linea\nmail-aprobacion.eml\nremito.pdf"}
+                  />
+                </label>
+              </div>
             </div>
 
-            <label className="workspace-label">
-              <span>Proxima accion</span>
-              <input className="workspace-input" value={draft.nextAction} onChange={(event) => setDraft((current) => ({ ...current, nextAction: event.target.value }))} />
-            </label>
+            {error ? <div className="workspace-empty">{error}</div> : null}
 
-            <label className="workspace-label">
-              <span>Descripcion de la falla</span>
-              <textarea className="workspace-textarea" value={draft.failureDescription} onChange={(event) => setDraft((current) => ({ ...current, failureDescription: event.target.value }))} />
-            </label>
-
-            <label className="workspace-label">
-              <span>Observaciones</span>
-              <textarea className="workspace-textarea" value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} />
-            </label>
+            <div className="workspace-chip-row">
+              <button className="workspace-button" type="submit" disabled={isSaving}>
+                {isSaving ? "Guardando..." : "Guardar caso"}
+              </button>
+              <button
+                className="workspace-button-secondary"
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setDraft(getInitialDraft(activeOwner?.name));
+                }}
+              >
+                Reiniciar formulario
+              </button>
+            </div>
           </form>
         </SectionPanel>
 
-        <SectionPanel title="Vista previa" description="Resumen rapido del caso antes de conectarlo al guardado definitivo.">
+        <SectionPanel title="Vista previa" description="Chequeo rapido antes de crear el caso y abrir su detalle.">
           <dl className="workspace-data-list">
             <div className="workspace-data-item">
               <dt>Ticket Kingston</dt>
-              <dd>{draft.kingstonNumber}</dd>
+              <dd>{draft.kingstonNumber || "Pendiente"}</dd>
             </div>
             <div className="workspace-data-item">
               <dt>Cliente y contacto</dt>
               <dd>
-                {draft.clientName} / {draft.contactName}
+                {draft.clientName || "Cliente pendiente"} / {draft.contactName || "Contacto pendiente"}
+              </dd>
+            </div>
+            <div className="workspace-data-item">
+              <dt>Ruta operativa</dt>
+              <dd>
+                {draft.zone} / {draft.delivery === "Dispatch" ? "Envio" : "Retiro"} / {draft.status}
+              </dd>
+            </div>
+            <div className="workspace-data-item">
+              <dt>Direccion</dt>
+              <dd>
+                {draft.address || "Direccion pendiente"}
+                {draft.city || draft.province ? `, ${draft.city}, ${draft.province}` : ""}
+              </dd>
+            </div>
+            <div className="workspace-data-item">
+              <dt>Producto</dt>
+              <dd>
+                {draft.sku || "SKU pendiente"} / {draft.productDescription || "Descripcion pendiente"} /{" "}
+                {draft.quantity || "0"} un.
               </dd>
             </div>
             <div className="workspace-data-item">
@@ -185,32 +548,30 @@ export default function NewCasePage() {
               <dd>{draft.owner}</dd>
             </div>
             <div className="workspace-data-item">
-              <dt>Estado inicial</dt>
-              <dd>{draft.status}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Ruta operativa</dt>
-              <dd>
-                {draft.zone} / {draft.delivery === "Dispatch" ? "Envio" : "Retiro"}
-              </dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Producto</dt>
-              <dd>
-                {draft.sku} / {draft.productDescription} / {draft.quantity} un.
-              </dd>
-            </div>
-            <div className="workspace-data-item">
               <dt>Proxima accion</dt>
               <dd>{draft.nextAction}</dd>
             </div>
             <div className="workspace-data-item">
               <dt>Falla</dt>
-              <dd>{draft.failureDescription}</dd>
+              <dd>{draft.failureDescription || "Sin descripcion cargada."}</dd>
             </div>
             <div className="workspace-data-item">
-              <dt>Observaciones</dt>
-              <dd>{draft.notes}</dd>
+              <dt>Datos bancarios</dt>
+              <dd>
+                {draft.bankName || draft.accountHolder || draft.alias
+                  ? `${draft.bankName || "Banco pendiente"} / ${draft.accountHolder || "Titular pendiente"} / ${draft.alias || "Alias pendiente"}`
+                  : "Se completaran luego o se tomaran del cliente conocido."}
+              </dd>
+            </div>
+            <div className="workspace-data-item">
+              <dt>Adjuntos</dt>
+              <dd>
+                {draft.attachments
+                  .split("\n")
+                  .map((entry) => entry.trim())
+                  .filter(Boolean)
+                  .join(", ") || "Sin adjuntos iniciales"}
+              </dd>
             </div>
           </dl>
         </SectionPanel>

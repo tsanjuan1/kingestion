@@ -13,12 +13,15 @@ import {
   getReportsSnapshot
 } from "@/lib/kingston/helpers";
 import type {
+  CasePriority,
   CaseEvent,
   ClientBankingDetails,
+  DeliveryMode,
   ExternalStatus,
   KingstonCase,
   OwnerDirectoryEntry,
-  UserInteractionLog
+  UserInteractionLog,
+  Zone
 } from "@/lib/kingston/types";
 
 const STORAGE_KEY = "kingestion.workspace.v3";
@@ -39,6 +42,31 @@ type OwnerInput = {
   active: boolean;
 };
 
+type CreateCaseInput = {
+  kingstonNumber: string;
+  clientName: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  owner: string;
+  externalStatus: ExternalStatus;
+  zone: Zone;
+  deliveryMode: DeliveryMode;
+  priority: CasePriority;
+  address: string;
+  province: string;
+  city: string;
+  sku: string;
+  quantity: number;
+  productDescription: string;
+  failureDescription: string;
+  nextAction: string;
+  observations: string;
+  origin: KingstonCase["origin"];
+  banking?: Partial<ClientBankingDetails>;
+  attachmentNames?: string[];
+};
+
 type KingestionContextValue = WorkspaceState & {
   activeOwner: OwnerDirectoryEntry | null;
   openCases: KingstonCase[];
@@ -49,6 +77,7 @@ type KingestionContextValue = WorkspaceState & {
   findCaseById: (caseId: string) => KingstonCase | undefined;
   setActiveOwner: (ownerId: string) => void;
   setThemeMode: (themeMode: ThemeMode) => void;
+  createCase: (input: CreateCaseInput) => string;
   createOwner: (input: OwnerInput) => void;
   updateOwner: (ownerId: string, input: OwnerInput) => void;
   deleteOwner: (ownerId: string) => void;
@@ -346,6 +375,70 @@ function buildInitials(name: string) {
   return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
 }
 
+function getNextInternalCaseNumber(cases: KingstonCase[]) {
+  return (
+    cases.reduce((maxValue, entry) => {
+      const internalMatch = entry.internalNumber.match(/RMA-(\d+)/i);
+      const idMatch = entry.id.match(/rma-(\d+)/i);
+      const currentValue = Number(internalMatch?.[1] ?? idMatch?.[1] ?? 0);
+
+      return currentValue > maxValue ? currentValue : maxValue;
+    }, 24000) + 1
+  );
+}
+
+function addDays(baseDate: Date, days: number) {
+  const nextDate = new Date(baseDate);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate.toISOString();
+}
+
+function getSlaDays(priority: CasePriority) {
+  switch (priority) {
+    case "Critical":
+      return 2;
+    case "High":
+      return 3;
+    case "Low":
+      return 7;
+    default:
+      return 5;
+  }
+}
+
+function getInitialTaskDueDays(priority: CasePriority) {
+  switch (priority) {
+    case "Critical":
+      return 1;
+    case "Low":
+      return 3;
+    default:
+      return 2;
+  }
+}
+
+function inferAttachmentKind(name: string): KingstonCase["attachments"][number]["kind"] {
+  const normalizedName = name.toLowerCase();
+
+  if (normalizedName.endsWith(".eml") || normalizedName.endsWith(".msg")) {
+    return "mail";
+  }
+
+  if (/\.(png|jpe?g|webp|heic|gif)$/i.test(normalizedName)) {
+    return "photo";
+  }
+
+  if (normalizedName.includes("guia") || normalizedName.includes("tracking")) {
+    return "guide";
+  }
+
+  if (normalizedName.includes("form") || normalizedName.includes("formulario")) {
+    return "form";
+  }
+
+  return "proof";
+}
+
 function normalizeOwner(owner: OwnerDirectoryEntry): OwnerDirectoryEntry {
   return {
     ...owner,
@@ -538,6 +631,179 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
       ...currentState,
       themeMode
     }));
+  };
+
+  const createCase = (input: CreateCaseInput) => {
+    const normalizedClientName = input.clientName.trim();
+    const normalizedContactName = input.contactName.trim();
+    const normalizedOwner = input.owner.trim() || "Sin asignar";
+    const normalizedAddress = input.address.trim();
+    const normalizedProvince = input.province.trim();
+    const normalizedCity = input.city.trim();
+    const normalizedKingstonNumber = input.kingstonNumber.trim();
+    const normalizedSku = input.sku.trim();
+    const normalizedProductDescription = input.productDescription.trim();
+    const normalizedFailureDescription = input.failureDescription.trim();
+    const normalizedObservations = input.observations.trim();
+    const trimmedNextAction = input.nextAction.trim();
+    const fallbackClientDetails = clientDirectory[normalizedClientName];
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const nextCaseNumber = getNextInternalCaseNumber(state.cases);
+    const caseId = `rma-${nextCaseNumber}`;
+    const internalNumber = `RMA-${nextCaseNumber}`;
+    const isTerminalStatus = input.externalStatus === "Realizado" || input.externalStatus === "Cerrado";
+    const nextAction = isTerminalStatus
+      ? getNextActionCopy(input.externalStatus)
+      : trimmedNextAction || getNextActionCopy(input.externalStatus);
+    const fullAddress = normalizedAddress || fallbackClientDetails?.fullAddress || "Direccion pendiente";
+    const attachmentNames = (input.attachmentNames ?? []).map((entry) => entry.trim()).filter(Boolean);
+    const bankingValues = input.banking ?? {};
+    const hasExplicitBanking = Object.values(bankingValues).some((value) => Boolean(value?.trim()));
+    const banking =
+      hasExplicitBanking || fallbackClientDetails?.banking
+        ? {
+            bankName: bankingValues.bankName?.trim() || fallbackClientDetails?.banking.bankName || "Banco pendiente",
+            accountHolder:
+              bankingValues.accountHolder?.trim() ||
+              fallbackClientDetails?.banking.accountHolder ||
+              normalizedClientName,
+            cuit: bankingValues.cuit?.trim() || fallbackClientDetails?.banking.cuit || "CUIT pendiente",
+            cbu: bankingValues.cbu?.trim() || fallbackClientDetails?.banking.cbu || "CBU pendiente",
+            alias: bankingValues.alias?.trim() || fallbackClientDetails?.banking.alias || "ALIAS.PENDIENTE",
+            accountNumber:
+              bankingValues.accountNumber?.trim() ||
+              fallbackClientDetails?.banking.accountNumber ||
+              "Cuenta pendiente"
+          }
+        : undefined;
+
+    setState((currentState) => {
+      const actor = resolveActor(currentState);
+      const actorName = actor?.name ?? "Sesion sin responsable activo";
+      const logisticsAddress =
+        input.deliveryMode === "Pickup"
+          ? "Mostrador central ANYX"
+          : [fullAddress, normalizedCity, normalizedProvince, "Argentina"].filter(Boolean).join(", ");
+
+      const initialTask = isTerminalStatus
+        ? []
+        : [
+            {
+              id: createId("task"),
+              title: "Validar caso",
+              description: nextAction,
+              type: "validation" as const,
+              assignee: normalizedOwner,
+              priority: input.priority,
+              dueAt: addDays(now, getInitialTaskDueDays(input.priority)),
+              state: "Pending" as const
+            }
+          ];
+
+      const nextComments = normalizedObservations
+        ? [
+            {
+              id: createId("comment"),
+              author: actorName,
+              body: normalizedObservations,
+              internal: true,
+              createdAt: nowIso
+            }
+          ]
+        : [];
+
+      const nextAttachments = attachmentNames.map((name) => ({
+        id: createId("attachment"),
+        name,
+        kind: inferAttachmentKind(name),
+        sizeLabel: "Adjunto inicial",
+        uploadedBy: actorName,
+        createdAt: nowIso
+      }));
+
+      const createdCase = normalizeCase({
+        id: caseId,
+        internalNumber,
+        kingstonNumber: normalizedKingstonNumber,
+        clientName: normalizedClientName,
+        contactName: normalizedContactName,
+        contactEmail: input.contactEmail.trim().toLowerCase(),
+        contactPhone: input.contactPhone.trim(),
+        zone: input.zone,
+        deliveryMode: input.deliveryMode,
+        priority: input.priority,
+        owner: normalizedOwner,
+        nextAction,
+        externalStatus: input.externalStatus,
+        internalSubstatus: getInitialSubstatus(input.externalStatus),
+        openedAt: nowIso,
+        updatedAt: nowIso,
+        slaDueAt: addDays(now, getSlaDays(input.priority)),
+        address: fullAddress,
+        province: normalizedProvince,
+        city: normalizedCity,
+        sku: normalizedSku,
+        productDescription: normalizedProductDescription,
+        quantity: input.quantity,
+        failureDescription: normalizedFailureDescription,
+        origin: input.origin,
+        observations: normalizedObservations || "Sin observaciones cargadas.",
+        banking,
+        logistics: {
+          mode: input.deliveryMode,
+          address: logisticsAddress,
+          transporter: null,
+          guideNumber: null,
+          trackingUrl: null,
+          dispatchDate: null,
+          deliveredDate: isTerminalStatus ? nowIso : null,
+          shippingCost: null,
+          reimbursementState: input.deliveryMode === "Pickup" ? "Not applicable" : "Pending"
+        },
+        procurement: {
+          localStock: input.externalStatus === "Pedido a Kingston" ? "Unavailable" : "Pending",
+          wholesalerStock: input.externalStatus === "Pedido a Kingston" ? "Unavailable" : "Pending",
+          wholesalerName: null,
+          requiresKingstonOrder: input.externalStatus === "Pedido a Kingston",
+          kingstonRequestedAt: input.externalStatus === "Pedido a Kingston" ? nowIso : null,
+          receivedFromUsaAt: null,
+          releasedByPurchasing: false,
+          releasedAt: null,
+          movedToRmaWarehouse: false,
+          movedToRmaWarehouseAt: null
+        },
+        tasks: initialTask,
+        comments: nextComments,
+        attachments: nextAttachments,
+        events: [
+          {
+            id: createId("event"),
+            kind: "status-change",
+            title: "Caso creado",
+            detail: `${internalNumber} se creo en ${input.externalStatus} para ${normalizedClientName}.`,
+            actor: actorName,
+            createdAt: nowIso
+          }
+        ]
+      });
+
+      return appendAuditLog(
+        {
+          ...currentState,
+          cases: [createdCase, ...currentState.cases]
+        },
+        actor,
+        {
+          entityType: "case",
+          entityId: caseId,
+          action: "case-created",
+          detail: `Se creo ${internalNumber} para ${normalizedClientName}.`
+        }
+      );
+    });
+
+    return caseId;
   };
 
   const createOwner = (input: OwnerInput) => {
@@ -819,6 +1085,7 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
       findCaseById,
       setActiveOwner,
       setThemeMode,
+      createCase,
       createOwner,
       updateOwner,
       deleteOwner,

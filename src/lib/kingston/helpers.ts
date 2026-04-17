@@ -198,6 +198,8 @@ export function getOriginLabel(value: string) {
 
 export function getAuditActionLabel(action: string) {
   switch (action) {
+    case "case-created":
+      return "Alta de caso";
     case "owner-created":
       return "Alta de responsable";
     case "owner-updated":
