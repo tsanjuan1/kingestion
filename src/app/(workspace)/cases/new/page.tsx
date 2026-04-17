@@ -1,40 +1,55 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 
 import { ModuleSubnav } from "@/components/workspace/module-subnav";
 import { SectionPanel } from "@/components/workspace/section-panel";
-import { ownerDirectory, workflowStates } from "@/lib/kingston/data";
+import { useKingestion } from "@/components/workspace/kingestion-provider";
+import { workflowStates } from "@/lib/kingston/data";
 
-type NewCasePageProps = {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
+type DraftCase = {
+  kingstonNumber: string;
+  clientName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  owner: string;
+  status: string;
+  zone: string;
+  delivery: string;
+  sku: string;
+  quantity: string;
+  productDescription: string;
+  failureDescription: string;
+  nextAction: string;
+  notes: string;
 };
 
-function valueOf(entry: string | string[] | undefined, fallback = "") {
-  if (Array.isArray(entry)) {
-    return entry[0] ?? fallback;
-  }
+const initialDraft: DraftCase = {
+  kingstonNumber: "KS-",
+  clientName: "Cliente sin definir",
+  contactName: "Contacto sin definir",
+  email: "contacto@cliente.com",
+  phone: "+54",
+  owner: "",
+  status: "Informado",
+  zone: "Interior / Gran Buenos Aires",
+  delivery: "Dispatch",
+  sku: "SKU pendiente",
+  quantity: "1",
+  productDescription: "Descripcion pendiente",
+  failureDescription: "Sin descripcion de falla",
+  nextAction: "Validar zona, confirmar alta y enviar primera comunicacion.",
+  notes: "Sin observaciones cargadas."
+};
 
-  return entry ?? fallback;
-}
-
-export default async function NewCasePage({ searchParams }: NewCasePageProps) {
-  const resolved = await searchParams;
-  const draft = {
-    kingstonNumber: valueOf(resolved.kingstonNumber, "KS-"),
-    clientName: valueOf(resolved.clientName, "Cliente sin definir"),
-    contactName: valueOf(resolved.contactName, "Contacto sin definir"),
-    email: valueOf(resolved.email, "contacto@cliente.com"),
-    phone: valueOf(resolved.phone, "+54"),
-    owner: valueOf(resolved.owner, "Lucia Costa"),
-    status: valueOf(resolved.status, "Informado"),
-    zone: valueOf(resolved.zone, "Interior / Gran Buenos Aires"),
-    delivery: valueOf(resolved.delivery, "Dispatch"),
-    sku: valueOf(resolved.sku, "SKU pendiente"),
-    quantity: valueOf(resolved.quantity, "1"),
-    productDescription: valueOf(resolved.productDescription, "Descripcion pendiente"),
-    failureDescription: valueOf(resolved.failureDescription, "Sin descripcion de falla"),
-    nextAction: valueOf(resolved.nextAction, "Validar zona, confirmar alta y enviar primera comunicacion."),
-    notes: valueOf(resolved.notes, "Sin observaciones cargadas.")
-  };
+export default function NewCasePage() {
+  const { activeOwners, activeOwner } = useKingestion();
+  const [draft, setDraft] = useState<DraftCase>(() => ({
+    ...initialDraft,
+    owner: activeOwner?.name ?? activeOwners[0]?.name ?? "Sin asignar"
+  }));
 
   return (
     <div className="workspace-page">
@@ -52,54 +67,55 @@ export default async function NewCasePage({ searchParams }: NewCasePageProps) {
           </div>
         </div>
         <p className="workspace-subtitle">
-          Formulario inicial para definir la estructura del alta. Por ahora esta conectado como vista previa interactiva, para validar el flujo antes de enlazarlo a la base.
+          Formulario preliminar para definir el alta. Queda como vista previa mientras terminamos el guardado real.
         </p>
       </header>
 
       <ModuleSubnav
         items={[
-          { href: "/cases", label: "Bandeja" },
+          { href: "/cases", label: "Casos abiertos" },
           { href: "/cases/new", label: "Nuevo caso", active: true }
         ]}
       />
 
       <div className="workspace-grid-2">
-        <SectionPanel title="Carga inicial" description="Completa los datos y usa la vista previa para verificar el caso antes de conectar el guardado real.">
-          <form action="/cases/new" className="workspace-inline-form">
+        <SectionPanel title="Carga inicial" description="Campos base para empezar la operacion.">
+          <form className="workspace-inline-form">
             <div className="workspace-form-grid">
               <label className="workspace-label">
                 <span>Numero Kingston</span>
-                <input className="workspace-input" name="kingstonNumber" defaultValue={draft.kingstonNumber} />
+                <input className="workspace-input" value={draft.kingstonNumber} onChange={(event) => setDraft((current) => ({ ...current, kingstonNumber: event.target.value }))} />
               </label>
               <label className="workspace-label">
                 <span>Cliente</span>
-                <input className="workspace-input" name="clientName" defaultValue={draft.clientName} />
+                <input className="workspace-input" value={draft.clientName} onChange={(event) => setDraft((current) => ({ ...current, clientName: event.target.value }))} />
               </label>
               <label className="workspace-label">
                 <span>Contacto</span>
-                <input className="workspace-input" name="contactName" defaultValue={draft.contactName} />
+                <input className="workspace-input" value={draft.contactName} onChange={(event) => setDraft((current) => ({ ...current, contactName: event.target.value }))} />
               </label>
               <label className="workspace-label">
                 <span>Email</span>
-                <input className="workspace-input" name="email" defaultValue={draft.email} />
+                <input className="workspace-input" value={draft.email} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} />
               </label>
               <label className="workspace-label">
                 <span>Telefono</span>
-                <input className="workspace-input" name="phone" defaultValue={draft.phone} />
+                <input className="workspace-input" value={draft.phone} onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))} />
               </label>
               <label className="workspace-label">
                 <span>Responsable</span>
-                <select className="workspace-select" name="owner" defaultValue={draft.owner}>
-                  {ownerDirectory.map((owner) => (
-                    <option key={owner.name} value={owner.name}>
+                <select className="workspace-select" value={draft.owner} onChange={(event) => setDraft((current) => ({ ...current, owner: event.target.value }))}>
+                  {activeOwners.map((owner) => (
+                    <option key={owner.id} value={owner.name}>
                       {owner.name}
                     </option>
                   ))}
+                  <option value="Sin asignar">Sin asignar</option>
                 </select>
               </label>
               <label className="workspace-label">
                 <span>Estado inicial</span>
-                <select className="workspace-select" name="status" defaultValue={draft.status}>
+                <select className="workspace-select" value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
                   {workflowStates.map((state) => (
                     <option key={state.status} value={state.status}>
                       {state.status}
@@ -109,59 +125,50 @@ export default async function NewCasePage({ searchParams }: NewCasePageProps) {
               </label>
               <label className="workspace-label">
                 <span>Zona</span>
-                <select className="workspace-select" name="zone" defaultValue={draft.zone}>
+                <select className="workspace-select" value={draft.zone} onChange={(event) => setDraft((current) => ({ ...current, zone: event.target.value }))}>
                   <option value="Interior / Gran Buenos Aires">Interior / Gran Buenos Aires</option>
                   <option value="Capital / AMBA">Capital / AMBA</option>
                 </select>
               </label>
               <label className="workspace-label">
                 <span>Modalidad</span>
-                <select className="workspace-select" name="delivery" defaultValue={draft.delivery}>
+                <select className="workspace-select" value={draft.delivery} onChange={(event) => setDraft((current) => ({ ...current, delivery: event.target.value }))}>
                   <option value="Dispatch">Envio</option>
                   <option value="Pickup">Retiro</option>
                 </select>
               </label>
               <label className="workspace-label">
                 <span>SKU</span>
-                <input className="workspace-input" name="sku" defaultValue={draft.sku} />
+                <input className="workspace-input" value={draft.sku} onChange={(event) => setDraft((current) => ({ ...current, sku: event.target.value }))} />
               </label>
               <label className="workspace-label">
                 <span>Cantidad</span>
-                <input className="workspace-input" name="quantity" defaultValue={draft.quantity} />
+                <input className="workspace-input" value={draft.quantity} onChange={(event) => setDraft((current) => ({ ...current, quantity: event.target.value }))} />
               </label>
               <label className="workspace-label">
                 <span>Descripcion del producto</span>
-                <input className="workspace-input" name="productDescription" defaultValue={draft.productDescription} />
+                <input className="workspace-input" value={draft.productDescription} onChange={(event) => setDraft((current) => ({ ...current, productDescription: event.target.value }))} />
               </label>
             </div>
 
             <label className="workspace-label">
               <span>Proxima accion</span>
-              <input className="workspace-input" name="nextAction" defaultValue={draft.nextAction} />
+              <input className="workspace-input" value={draft.nextAction} onChange={(event) => setDraft((current) => ({ ...current, nextAction: event.target.value }))} />
             </label>
 
             <label className="workspace-label">
               <span>Descripcion de la falla</span>
-              <textarea className="workspace-textarea" name="failureDescription" defaultValue={draft.failureDescription} />
+              <textarea className="workspace-textarea" value={draft.failureDescription} onChange={(event) => setDraft((current) => ({ ...current, failureDescription: event.target.value }))} />
             </label>
 
             <label className="workspace-label">
               <span>Observaciones</span>
-              <textarea className="workspace-textarea" name="notes" defaultValue={draft.notes} />
+              <textarea className="workspace-textarea" value={draft.notes} onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))} />
             </label>
-
-            <div className="workspace-chip-row">
-              <button className="workspace-button" type="submit">
-                Actualizar vista previa
-              </button>
-              <Link className="workspace-button-secondary" href="/cases">
-                Cancelar
-              </Link>
-            </div>
           </form>
         </SectionPanel>
 
-        <SectionPanel title="Vista previa" description="Resumen del caso con el formato que luego usara la bandeja y el detalle.">
+        <SectionPanel title="Vista previa" description="Resumen rapido del caso antes de conectarlo al guardado definitivo.">
           <dl className="workspace-data-list">
             <div className="workspace-data-item">
               <dt>Ticket Kingston</dt>

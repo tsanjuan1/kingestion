@@ -4,31 +4,15 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
-import { getDashboardSnapshot, getOwnerInitials } from "@/lib/kingston/helpers";
+import { useKingestion } from "@/components/workspace/kingestion-provider";
+import { getOwnerInitials } from "@/lib/kingston/helpers";
 
-const navigationGroups = [
-  {
-    title: "Inicio",
-    items: [{ href: "/dashboard", label: "Resumen", hint: "Estado general y prioridades" }]
-  },
-  {
-    title: "Casos",
-    items: [
-      { href: "/cases", label: "Bandeja", hint: "Casos abiertos y filtros" },
-      { href: "/cases/new", label: "Nuevo caso", hint: "Alta y vista previa" }
-    ]
-  },
-  {
-    title: "Operacion",
-    items: [
-      { href: "/tasks", label: "Tareas", hint: "Vencimientos y responsables" },
-      { href: "/reports", label: "Reportes", hint: "Aging y volumen" }
-    ]
-  },
-  {
-    title: "Configuracion",
-    items: [{ href: "/admin/workflow", label: "Flujo", hint: "Estados y reglas" }]
-  }
+const navigationItems = [
+  { href: "/dashboard", label: "Resumen", hint: "Pantallazo general de la operacion" },
+  { href: "/cases", label: "Casos abiertos", hint: "Seguimiento y avance por etapas" },
+  { href: "/closed-cases", label: "Casos cerrados", hint: "Realizados y cerrados" },
+  { href: "/reports", label: "Reportes", hint: "Consultas y exportes PDF" },
+  { href: "/settings", label: "Configuracion", hint: "Responsables, asignaciones y auditoria" }
 ];
 
 function isActive(pathname: string, href: string) {
@@ -42,18 +26,26 @@ function isActive(pathname: string, href: string) {
 function getPageLabel(pathname: string) {
   if (pathname.startsWith("/cases/new")) return "Nuevo caso";
   if (pathname.startsWith("/cases/")) return "Detalle del caso";
-  if (pathname.startsWith("/cases")) return "Bandeja de casos";
-  if (pathname.startsWith("/tasks")) return "Tareas";
+  if (pathname.startsWith("/cases")) return "Casos abiertos";
+  if (pathname.startsWith("/closed-cases")) return "Casos cerrados";
   if (pathname.startsWith("/reports")) return "Reportes";
-  if (pathname.startsWith("/admin/workflow")) return "Flujo";
+  if (pathname.startsWith("/settings")) return "Configuracion";
   if (pathname.startsWith("/login")) return "Acceso";
 
   return "Resumen";
 }
 
+function getSearchAction(pathname: string) {
+  if (pathname.startsWith("/closed-cases")) {
+    return "/closed-cases";
+  }
+
+  return "/cases";
+}
+
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const snapshot = getDashboardSnapshot();
+  const { activeOwner, dashboardSnapshot } = useKingestion();
 
   return (
     <div className="workspace-shell">
@@ -64,47 +56,44 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               kingestion
             </Link>
             <p className="text-sm leading-6 text-white/55">
-              Gestion interna de casos Kingston para ANYX. Separada de Anyx Comercial.
+              Gestion interna de RMA Kingston para ANYX. Separada de Anyx Comercial.
             </p>
           </div>
 
-          <nav className="space-y-6">
-            {navigationGroups.map((group) => (
-              <div key={group.title} className="space-y-2">
-                <div className="workspace-nav-group-title">{group.title}</div>
-                <div className="space-y-1.5">
-                  {group.items.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`workspace-nav-link ${isActive(pathname, item.href) ? "workspace-nav-link-active" : ""}`}
-                    >
-                      <span className="workspace-nav-link-label">{item.label}</span>
-                      <span className="workspace-nav-link-hint">{item.hint}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
+          <nav className="space-y-2" aria-label="Modulos principales">
+            {navigationItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`workspace-nav-link ${isActive(pathname, item.href) ? "workspace-nav-link-active" : ""}`}
+              >
+                <span className="workspace-nav-link-label">{item.label}</span>
+                <span className="workspace-nav-link-hint">{item.hint}</span>
+              </Link>
             ))}
           </nav>
         </div>
 
         <div className="workspace-sidebar-summary">
-          <p className="workspace-kicker">Hoy</p>
+          <p className="workspace-kicker">Situacion actual</p>
           <div className="space-y-2.5 text-sm text-white/66">
             <div className="flex items-center justify-between">
-              <span>Casos abiertos</span>
-              <strong className="text-white">{snapshot.openCases.length}</strong>
+              <span>Abiertos</span>
+              <strong className="text-white">{dashboardSnapshot.openCases.length}</strong>
             </div>
             <div className="flex items-center justify-between">
-              <span>Tareas vencidas</span>
-              <strong className="text-white">{snapshot.taskBuckets.overdue.length}</strong>
+              <span>Cerrados</span>
+              <strong className="text-white">{dashboardSnapshot.closedCases.length}</strong>
             </div>
             <div className="flex items-center justify-between">
-              <span>Listos para retiro</span>
+              <span>Pedido a Kingston</span>
               <strong className="text-white">
-                {snapshot.openCases.filter((entry) => entry.externalStatus === "Producto listo para retiro").length}
+                {dashboardSnapshot.openCases.filter((entry) => entry.externalStatus === "Pedido a Kingston").length}
               </strong>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>SLA vencido</span>
+              <strong className="text-white">{dashboardSnapshot.taskBuckets.overdue.length}</strong>
             </div>
           </div>
         </div>
@@ -118,16 +107,20 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <Suspense fallback={<WorkspaceSearchFallback />}>
-            <WorkspaceSearchForm />
+            <WorkspaceSearchForm action={getSearchAction(pathname)} />
           </Suspense>
 
-          <div className="workspace-user">
-            <div className="workspace-user-badge">{getOwnerInitials("Sofia Mendez")}</div>
-            <div className="hidden text-right md:block">
-              <div className="workspace-topbar-label">Sesion</div>
-              <div className="text-sm font-medium text-white">Operacion ANYX</div>
+          <Link className="workspace-user" href="/settings?view=responsables">
+            <div className="workspace-user-badge">
+              {getOwnerInitials(activeOwner?.name ?? "Sin sesion")}
             </div>
-          </div>
+            <div className="hidden text-right md:block">
+              <div className="workspace-topbar-label">Usuario activo</div>
+              <div className="text-sm font-medium text-white">
+                {activeOwner?.name ?? "Sin responsable activo"}
+              </div>
+            </div>
+          </Link>
         </header>
 
         <main className="workspace-content">{children}</main>
@@ -136,12 +129,12 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function WorkspaceSearchForm() {
+function WorkspaceSearchForm({ action }: { action: string }) {
   const searchParams = useSearchParams();
   const currentSearch = searchParams.get("q") ?? "";
 
   return (
-    <form action="/cases" className="workspace-search-form">
+    <form action={action} className="workspace-search-form">
       <label htmlFor="workspace-search" className="workspace-topbar-label">
         Buscar caso
       </label>

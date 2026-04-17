@@ -1,13 +1,13 @@
 import type { KingstonCase, OwnerDirectoryEntry, TransitionRule, WorkflowState } from "@/lib/kingston/types";
 
-export const referenceNow = "2026-04-16T15:00:00-03:00";
+export const referenceNow = "2026-04-17T10:00:00-03:00";
 
 export const ownerDirectory: OwnerDirectoryEntry[] = [
-  { name: "Lucia Costa", team: "Operations", initials: "LC" },
-  { name: "Martin Ponce", team: "Logistics", initials: "MP" },
-  { name: "Camila Rios", team: "Purchasing", initials: "CR" },
-  { name: "Ivan Sosa", team: "Warehouse", initials: "IS" },
-  { name: "Sofia Mendez", team: "Management", initials: "SM" }
+  { id: "owner-lucia-costa", name: "Lucia Costa", team: "Operations", initials: "LC", email: "lucia.costa@anyx.com.ar", active: true },
+  { id: "owner-martin-ponce", name: "Martin Ponce", team: "Logistics", initials: "MP", email: "martin.ponce@anyx.com.ar", active: true },
+  { id: "owner-camila-rios", name: "Camila Rios", team: "Purchasing", initials: "CR", email: "camila.rios@anyx.com.ar", active: true },
+  { id: "owner-ivan-sosa", name: "Ivan Sosa", team: "Warehouse", initials: "IS", email: "ivan.sosa@anyx.com.ar", active: true },
+  { id: "owner-sofia-mendez", name: "Sofia Mendez", team: "Management", initials: "SM", email: "sofia.mendez@anyx.com.ar", active: true }
 ];
 
 export const workflowStates: WorkflowState[] = [

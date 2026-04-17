@@ -73,6 +73,15 @@ export type CaseAttachment = {
   createdAt: string;
 };
 
+export type ClientBankingDetails = {
+  bankName: string;
+  accountHolder: string;
+  cuit: string;
+  cbu: string;
+  alias: string;
+  accountNumber: string;
+};
+
 export type CaseEvent = {
   id: string;
   kind: EventKind;
@@ -134,6 +143,7 @@ export type KingstonCase = {
   failureDescription: string;
   origin: "Kingston email" | "Operations load" | "Commercial handoff";
   observations: string;
+  banking?: ClientBankingDetails;
   logistics: CaseLogistics;
   procurement: CaseProcurement;
   tasks: CaseTask[];
@@ -143,7 +153,23 @@ export type KingstonCase = {
 };
 
 export type OwnerDirectoryEntry = {
+  id: string;
   name: string;
   team: "Operations" | "Logistics" | "Purchasing" | "Warehouse" | "Management";
   initials: string;
+  email: string;
+  active: boolean;
+};
+
+export type InteractionEntityType = "case" | "owner" | "session" | "report";
+
+export type UserInteractionLog = {
+  id: string;
+  actorId: string | null;
+  actorName: string;
+  entityType: InteractionEntityType;
+  entityId: string;
+  action: string;
+  detail: string;
+  createdAt: string;
 };

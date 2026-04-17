@@ -32,7 +32,7 @@ export function TaskList({ tasks, emptyLabel }: TaskListProps) {
   return (
     <div className="space-y-3">
       {tasks.map((task) => (
-        <article key={task.id} className="rounded-[1rem] border border-white/10 bg-white/4 px-4 py-4">
+        <article key={task.id} className="workspace-list-card">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">

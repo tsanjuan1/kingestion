@@ -11,7 +11,7 @@ export function EventTimeline({ events }: EventTimelineProps) {
       {events.map((event) => (
         <article key={event.id} className="grid gap-3 md:grid-cols-[170px_minmax(0,1fr)]">
           <div className="text-xs uppercase tracking-[0.16em] text-white/38">{formatDateTime(event.createdAt)}</div>
-          <div className="rounded-[1rem] border border-white/10 bg-white/4 px-4 py-4">
+          <div className="workspace-list-card">
             <div className="flex flex-wrap items-center gap-2">
               <span className="workspace-chip">{getEventKindLabel(event.kind)}</span>
               <span className="text-xs uppercase tracking-[0.16em] text-white/38">{event.actor}</span>

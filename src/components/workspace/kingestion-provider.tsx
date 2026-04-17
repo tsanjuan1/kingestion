@@ -1,0 +1,803 @@
+"use client";
+
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+
+import { kingstonCases, ownerDirectory, workflowStates } from "@/lib/kingston/data";
+import {
+  buildCaseAddress,
+  getClosedCases,
+  getDashboardSnapshot,
+  getInitialSubstatus,
+  getNextActionCopy,
+  getOpenCases,
+  getReportsSnapshot
+} from "@/lib/kingston/helpers";
+import type {
+  CaseEvent,
+  ClientBankingDetails,
+  ExternalStatus,
+  KingstonCase,
+  OwnerDirectoryEntry,
+  UserInteractionLog
+} from "@/lib/kingston/types";
+
+const STORAGE_KEY = "kingestion.workspace.v3";
+
+type WorkspaceState = {
+  cases: KingstonCase[];
+  owners: OwnerDirectoryEntry[];
+  auditLog: UserInteractionLog[];
+  activeOwnerId: string | null;
+};
+
+type OwnerInput = {
+  name: string;
+  email: string;
+  team: OwnerDirectoryEntry["team"];
+  active: boolean;
+};
+
+type KingestionContextValue = WorkspaceState & {
+  activeOwner: OwnerDirectoryEntry | null;
+  openCases: KingstonCase[];
+  closedCases: KingstonCase[];
+  activeOwners: OwnerDirectoryEntry[];
+  dashboardSnapshot: ReturnType<typeof getDashboardSnapshot>;
+  reportsSnapshot: ReturnType<typeof getReportsSnapshot>;
+  findCaseById: (caseId: string) => KingstonCase | undefined;
+  setActiveOwner: (ownerId: string) => void;
+  createOwner: (input: OwnerInput) => void;
+  updateOwner: (ownerId: string, input: OwnerInput) => void;
+  deleteOwner: (ownerId: string) => void;
+  assignCaseOwner: (caseId: string, ownerName: string) => void;
+  updateCaseStatus: (caseId: string, status: ExternalStatus) => void;
+  recordCaseView: (caseId: string) => void;
+  recordReportDownload: (reportName: string) => void;
+};
+
+type ClientDetails = {
+  fullAddress: string;
+  banking: ClientBankingDetails;
+};
+
+const clientDirectory: Record<string, ClientDetails> = {
+  "Micro Delta SA": {
+    fullAddress: "Av. Colon 4132, Piso 3, Cordoba Capital, Cordoba, Argentina",
+    banking: {
+      bankName: "Banco Galicia",
+      accountHolder: "Micro Delta SA",
+      cuit: "30-70881122-4",
+      cbu: "0070341820000001265789",
+      alias: "MICRODELTA.RMA",
+      accountNumber: "3421/8"
+    }
+  },
+  "Compu Norte SRL": {
+    fullAddress: "Parana 758, Oficina 4B, CABA, Buenos Aires, Argentina",
+    banking: {
+      bankName: "Santander",
+      accountHolder: "Compu Norte SRL",
+      cuit: "30-71124567-2",
+      cbu: "0720019820000004523187",
+      alias: "COMPUNORTE.RETIRO",
+      accountNumber: "198245/2"
+    }
+  },
+  "Nexo Digital": {
+    fullAddress: "Ruta 197 Km 2.8, Parque Industrial, San Miguel, Buenos Aires, Argentina",
+    banking: {
+      bankName: "BBVA",
+      accountHolder: "Nexo Digital SA",
+      cuit: "30-70991238-8",
+      cbu: "0170183720000003348921",
+      alias: "NEXODIGITAL.SSD",
+      accountNumber: "1837/5"
+    }
+  },
+  "Grupo Atlas IT": {
+    fullAddress: "San Martin 1462, Godoy Cruz, Mendoza, Argentina",
+    banking: {
+      bankName: "Banco Macro",
+      accountHolder: "Grupo Atlas IT",
+      cuit: "30-71200977-5",
+      cbu: "2850597820099001234567",
+      alias: "ATLASIT.KINGSTON",
+      accountNumber: "5978/2"
+    }
+  },
+  "Hyperlink SA": {
+    fullAddress: "Sarmiento 920, Piso 7, CABA, Buenos Aires, Argentina",
+    banking: {
+      bankName: "ICBC",
+      accountHolder: "Hyperlink SA",
+      cuit: "30-71441209-1",
+      cbu: "0150459820000008823145",
+      alias: "HYPERLINK.RMA",
+      accountNumber: "4598/0"
+    }
+  },
+  "Orbit Solutions": {
+    fullAddress: "Vuelta de Obligado 1823, CABA, Buenos Aires, Argentina",
+    banking: {
+      bankName: "Banco Provincia",
+      accountHolder: "Orbit Solutions SRL",
+      cuit: "30-71601854-6",
+      cbu: "0140999820000005501234",
+      alias: "ORBIT.REEMPLAZOS",
+      accountNumber: "99982/4"
+    }
+  },
+  "Data Vision Patagonia": {
+    fullAddress: "Belgrano 455, Neuquen Capital, Neuquen, Argentina",
+    banking: {
+      bankName: "Banco Patagonia",
+      accountHolder: "Data Vision Patagonia SA",
+      cuit: "30-71733122-7",
+      cbu: "0340145820000001189201",
+      alias: "DATAVISION.PAT",
+      accountNumber: "145/9"
+    }
+  },
+  "Zeta Servicios Informaticos": {
+    fullAddress: "Av. Santa Fe 3250, Piso 8, CABA, Buenos Aires, Argentina",
+    banking: {
+      bankName: "HSBC",
+      accountHolder: "Zeta Servicios Informaticos SRL",
+      cuit: "30-71844011-3",
+      cbu: "1500045820000007745120",
+      alias: "ZETA.SERVICIOS.RMA",
+      accountNumber: "45820/1"
+    }
+  }
+};
+
+const archivedCasesSeed: KingstonCase[] = [
+  {
+    id: "rma-23984",
+    internalNumber: "RMA-23984",
+    kingstonNumber: "KS-982771",
+    clientName: "Data Vision Patagonia",
+    contactName: "Mauro Ilardo",
+    contactEmail: "m.ilardo@datavision.com.ar",
+    contactPhone: "+54 299 481 9033",
+    zone: "Interior / Gran Buenos Aires",
+    deliveryMode: "Dispatch",
+    priority: "Medium",
+    owner: "Martin Ponce",
+    nextAction: "Caso fuera de la bandeja operativa. No requiere una proxima accion abierta.",
+    externalStatus: "Realizado",
+    internalSubstatus: "Cambio exitoso",
+    openedAt: "2026-03-26T10:40:00-03:00",
+    updatedAt: "2026-04-09T17:10:00-03:00",
+    slaDueAt: "2026-04-10T18:00:00-03:00",
+    address: "Belgrano 455",
+    province: "Neuquen",
+    city: "Neuquen Capital",
+    sku: "KC3000/2048G",
+    productDescription: "SSD KC3000 2TB NVMe",
+    quantity: 2,
+    failureDescription: "Lote con perdida total de deteccion luego de reinicios en caliente.",
+    origin: "Kingston email",
+    observations: "Reemplazo entregado y recepcion confirmado por el cliente.",
+    logistics: {
+      mode: "Dispatch",
+      address: "Belgrano 455, Neuquen Capital, Neuquen, Argentina",
+      transporter: "Andreani",
+      guideNumber: "A99823145",
+      trackingUrl: "https://tracking.andreani.example/A99823145",
+      dispatchDate: "2026-04-08T14:15:00-03:00",
+      deliveredDate: "2026-04-09T11:20:00-03:00",
+      shippingCost: "ARS 24.900",
+      reimbursementState: "Completed"
+    },
+    procurement: {
+      localStock: "Available",
+      wholesalerStock: "Pending",
+      wholesalerName: null,
+      requiresKingstonOrder: false,
+      kingstonRequestedAt: null,
+      receivedFromUsaAt: null,
+      releasedByPurchasing: true,
+      releasedAt: "2026-04-07T09:00:00-03:00",
+      movedToRmaWarehouse: true,
+      movedToRmaWarehouseAt: "2026-04-07T12:30:00-03:00"
+    },
+    tasks: [
+      {
+        id: "task-23984-1",
+        title: "Confirmar recepcion final",
+        description: "Validar entrega y cerrar el caso.",
+        type: "logistics",
+        assignee: "Martin Ponce",
+        priority: "Medium",
+        dueAt: "2026-04-09T16:00:00-03:00",
+        state: "Completed"
+      }
+    ],
+    comments: [
+      {
+        id: "comment-23984-1",
+        author: "Martin Ponce",
+        body: "Cliente confirmo recepcion y funcionamiento correcto del reemplazo.",
+        internal: true,
+        createdAt: "2026-04-09T17:10:00-03:00"
+      }
+    ],
+    attachments: [
+      {
+        id: "attachment-23984-1",
+        name: "constancia-recepcion.pdf",
+        kind: "proof",
+        sizeLabel: "328 KB",
+        uploadedBy: "Martin Ponce",
+        createdAt: "2026-04-09T17:08:00-03:00"
+      }
+    ],
+    events: [
+      {
+        id: "event-23984-1",
+        kind: "logistics",
+        title: "Entrega confirmada",
+        detail: "Andreani informo entrega y el cliente confirmo recepcion del reemplazo.",
+        actor: "Martin Ponce",
+        createdAt: "2026-04-09T17:10:00-03:00"
+      }
+    ]
+  },
+  {
+    id: "rma-23980",
+    internalNumber: "RMA-23980",
+    kingstonNumber: "KS-982401",
+    clientName: "Zeta Servicios Informaticos",
+    contactName: "Carla Biondi",
+    contactEmail: "cbiondi@zetasi.com.ar",
+    contactPhone: "+54 11 4331 8820",
+    zone: "Capital / AMBA",
+    deliveryMode: "Pickup",
+    priority: "Low",
+    owner: "Sofia Mendez",
+    nextAction: "Caso fuera de la bandeja operativa. No requiere una proxima accion abierta.",
+    externalStatus: "Cerrado",
+    internalSubstatus: "Caso cancelado administrativamente",
+    openedAt: "2026-03-21T13:15:00-03:00",
+    updatedAt: "2026-03-25T16:40:00-03:00",
+    slaDueAt: "2026-03-29T18:00:00-03:00",
+    address: "Av. Santa Fe 3250",
+    province: "Buenos Aires",
+    city: "CABA",
+    sku: "DTMAXA/256GB",
+    productDescription: "Pendrive DataTraveler Max 256GB",
+    quantity: 4,
+    failureDescription: "El cliente informo fallas, pero luego solicito cerrar el proceso por reposicion propia.",
+    origin: "Operations load",
+    observations: "Kingston y ANYX acordaron cierre administrativo sin reemplazo.",
+    logistics: {
+      mode: "Pickup",
+      address: "Mostrador central ANYX",
+      transporter: null,
+      guideNumber: null,
+      trackingUrl: null,
+      dispatchDate: null,
+      deliveredDate: null,
+      shippingCost: null,
+      reimbursementState: "Not applicable"
+    },
+    procurement: {
+      localStock: "Pending",
+      wholesalerStock: "Pending",
+      wholesalerName: null,
+      requiresKingstonOrder: false,
+      kingstonRequestedAt: null,
+      receivedFromUsaAt: null,
+      releasedByPurchasing: false,
+      releasedAt: null,
+      movedToRmaWarehouse: false,
+      movedToRmaWarehouseAt: null
+    },
+    tasks: [],
+    comments: [
+      {
+        id: "comment-23980-1",
+        author: "Sofia Mendez",
+        body: "Se cierra por definicion comercial y conformidad del cliente.",
+        internal: true,
+        createdAt: "2026-03-25T16:40:00-03:00"
+      }
+    ],
+    attachments: [],
+    events: [
+      {
+        id: "event-23980-1",
+        kind: "status-change",
+        title: "Cierre administrativo",
+        detail: "El cliente solicito cerrar el caso sin reemplazo fisico.",
+        actor: "Sofia Mendez",
+        createdAt: "2026-03-25T16:40:00-03:00"
+      }
+    ]
+  }
+];
+
+const KingestionContext = createContext<KingestionContextValue | null>(null);
+
+function createId(prefix: string) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+
+  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function buildInitials(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "NA";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
+}
+
+function normalizeOwner(owner: OwnerDirectoryEntry): OwnerDirectoryEntry {
+  return {
+    ...owner,
+    initials: owner.initials || buildInitials(owner.name),
+    active: owner.active ?? true
+  };
+}
+
+function normalizeCase(entry: KingstonCase): KingstonCase {
+  const clientDetails = clientDirectory[entry.clientName];
+  const baseAddress = clientDetails?.fullAddress ?? buildCaseAddress(entry);
+  const logisticsAddress =
+    entry.deliveryMode === "Pickup" ? entry.logistics.address : clientDetails?.fullAddress ?? entry.logistics.address;
+
+  return {
+    ...entry,
+    address: baseAddress,
+    banking: entry.banking ?? clientDetails?.banking,
+    nextAction: entry.nextAction || getNextActionCopy(entry.externalStatus),
+    internalSubstatus: entry.internalSubstatus || getInitialSubstatus(entry.externalStatus),
+    logistics: {
+      ...entry.logistics,
+      address: logisticsAddress
+    }
+  };
+}
+
+function createDefaultState(): WorkspaceState {
+  const owners = ownerDirectory.map(normalizeOwner);
+  const cases = [...kingstonCases, ...archivedCasesSeed].map(normalizeCase);
+  const activeOwnerId = owners.find((owner) => owner.active)?.id ?? null;
+
+  return {
+    cases,
+    owners,
+    auditLog: [],
+    activeOwnerId
+  };
+}
+
+function restoreState(rawState: string): WorkspaceState {
+  const parsed = JSON.parse(rawState) as Partial<WorkspaceState>;
+  const fallback = createDefaultState();
+  const owners = Array.isArray(parsed.owners) && parsed.owners.length > 0
+    ? parsed.owners.map(normalizeOwner)
+    : fallback.owners;
+  const cases = Array.isArray(parsed.cases) && parsed.cases.length > 0
+    ? parsed.cases.map(normalizeCase)
+    : fallback.cases;
+  const activeOwnerId = owners.some((owner) => owner.id === parsed.activeOwnerId && owner.active)
+    ? parsed.activeOwnerId ?? null
+    : owners.find((owner) => owner.active)?.id ?? null;
+
+  return {
+    owners,
+    cases,
+    auditLog: Array.isArray(parsed.auditLog) ? parsed.auditLog : [],
+    activeOwnerId
+  };
+}
+
+function resolveActor(state: WorkspaceState) {
+  return state.owners.find((owner) => owner.id === state.activeOwnerId) ?? null;
+}
+
+function createAuditEntry(
+  actor: OwnerDirectoryEntry | null,
+  payload: Omit<UserInteractionLog, "id" | "actorId" | "actorName" | "createdAt">
+): UserInteractionLog {
+  return {
+    id: createId("audit"),
+    actorId: actor?.id ?? null,
+    actorName: actor?.name ?? "Sesion sin responsable activo",
+    createdAt: new Date().toISOString(),
+    ...payload
+  };
+}
+
+function appendAuditLog(
+  state: WorkspaceState,
+  actor: OwnerDirectoryEntry | null,
+  payload: Omit<UserInteractionLog, "id" | "actorId" | "actorName" | "createdAt">
+) {
+  return {
+    ...state,
+    auditLog: [createAuditEntry(actor, payload), ...state.auditLog].slice(0, 300)
+  };
+}
+
+export function KingestionProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<WorkspaceState>(() => createDefaultState());
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        setState(restoreState(saved));
+      }
+    } catch {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } finally {
+      setIsHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [isHydrated, state]);
+
+  const activeOwner = useMemo(
+    () => state.owners.find((owner) => owner.id === state.activeOwnerId) ?? null,
+    [state.activeOwnerId, state.owners]
+  );
+
+  const openCases = useMemo(() => getOpenCases(state.cases), [state.cases]);
+  const closedCases = useMemo(() => getClosedCases(state.cases), [state.cases]);
+  const activeOwners = useMemo(
+    () => state.owners.filter((owner) => owner.active),
+    [state.owners]
+  );
+  const dashboardSnapshot = useMemo(
+    () => getDashboardSnapshot(state.cases, state.owners),
+    [state.cases, state.owners]
+  );
+  const reportsSnapshot = useMemo(
+    () => getReportsSnapshot(state.cases, state.owners),
+    [state.cases, state.owners]
+  );
+
+  const findCaseById = (caseId: string) => state.cases.find((entry) => entry.id === caseId);
+
+  const setActiveOwner = (ownerId: string) => {
+    setState((currentState) => {
+      const nextOwner = currentState.owners.find((owner) => owner.id === ownerId && owner.active);
+      if (!nextOwner) return currentState;
+
+      return appendAuditLog(
+        {
+          ...currentState,
+          activeOwnerId: nextOwner.id
+        },
+        nextOwner,
+        {
+          entityType: "session",
+          entityId: nextOwner.id,
+          action: "session-changed",
+          detail: `Se cambio el usuario activo a ${nextOwner.name}.`
+        }
+      );
+    });
+  };
+
+  const createOwner = (input: OwnerInput) => {
+    setState((currentState) => {
+      const actor = resolveActor(currentState);
+      const nextOwner: OwnerDirectoryEntry = {
+        id: createId("owner"),
+        name: input.name.trim(),
+        email: input.email.trim().toLowerCase(),
+        team: input.team,
+        active: input.active,
+        initials: buildInitials(input.name)
+      };
+
+      return appendAuditLog(
+        {
+          ...currentState,
+          owners: [...currentState.owners, nextOwner]
+        },
+        actor,
+        {
+          entityType: "owner",
+          entityId: nextOwner.id,
+          action: "owner-created",
+          detail: `Se agrego a ${nextOwner.name} dentro de ${nextOwner.team}.`
+        }
+      );
+    });
+  };
+
+  const updateOwner = (ownerId: string, input: OwnerInput) => {
+    setState((currentState) => {
+      const actor = resolveActor(currentState);
+      const previousOwner = currentState.owners.find((owner) => owner.id === ownerId);
+      if (!previousOwner) return currentState;
+
+      const nextOwner: OwnerDirectoryEntry = {
+        ...previousOwner,
+        name: input.name.trim(),
+        email: input.email.trim().toLowerCase(),
+        team: input.team,
+        active: input.active,
+        initials: buildInitials(input.name)
+      };
+
+      const updatedCases: KingstonCase[] = currentState.cases.map((entry) => {
+        const owner = entry.owner === previousOwner.name ? nextOwner.name : entry.owner;
+        const tasks: KingstonCase["tasks"] = entry.tasks.map((task) =>
+          task.assignee === previousOwner.name
+            ? {
+                ...task,
+                assignee: nextOwner.name
+              }
+            : task
+        );
+
+        return {
+          ...entry,
+          owner,
+          tasks
+        };
+      });
+
+      const fallbackOwnerId =
+        !nextOwner.active && currentState.activeOwnerId === nextOwner.id
+          ? currentState.owners.find((owner) => owner.id !== nextOwner.id && owner.active)?.id ?? null
+          : currentState.activeOwnerId;
+
+      return appendAuditLog(
+        {
+          ...currentState,
+          owners: currentState.owners.map((owner) => (owner.id === ownerId ? nextOwner : owner)),
+          cases: updatedCases,
+          activeOwnerId: fallbackOwnerId
+        },
+        actor,
+        {
+          entityType: "owner",
+          entityId: ownerId,
+          action: "owner-updated",
+          detail: `Se actualizo el responsable ${previousOwner.name}.`
+        }
+      );
+    });
+  };
+
+  const deleteOwner = (ownerId: string) => {
+    setState((currentState) => {
+      const actor = resolveActor(currentState);
+      const removedOwner = currentState.owners.find((owner) => owner.id === ownerId);
+      if (!removedOwner) return currentState;
+
+      const remainingOwners = currentState.owners.filter((owner) => owner.id !== ownerId);
+      const nextActiveOwnerId =
+        currentState.activeOwnerId === ownerId
+          ? remainingOwners.find((owner) => owner.active)?.id ?? null
+          : currentState.activeOwnerId;
+
+      const updatedCases: KingstonCase[] = currentState.cases.map((entry) => ({
+        ...entry,
+        owner: entry.owner === removedOwner.name ? "Sin asignar" : entry.owner,
+        tasks: entry.tasks.map((task) =>
+          task.assignee === removedOwner.name
+            ? {
+                ...task,
+                assignee: "Sin asignar"
+              }
+            : task
+        )
+      }));
+
+      return appendAuditLog(
+        {
+          ...currentState,
+          owners: remainingOwners,
+          cases: updatedCases,
+          activeOwnerId: nextActiveOwnerId
+        },
+        actor,
+        {
+          entityType: "owner",
+          entityId: ownerId,
+          action: "owner-deleted",
+          detail: `Se elimino a ${removedOwner.name} y las asignaciones quedaron liberadas.`
+        }
+      );
+    });
+  };
+
+  const assignCaseOwner = (caseId: string, ownerName: string) => {
+    setState((currentState) => {
+      const actor = resolveActor(currentState);
+      const targetCase = currentState.cases.find((entry) => entry.id === caseId);
+      if (!targetCase || targetCase.owner === ownerName) return currentState;
+
+      const nextCases: KingstonCase[] = currentState.cases.map((entry) =>
+        entry.id === caseId
+          ? (() => {
+              const nextEvent: CaseEvent = {
+                id: createId("event"),
+                kind: "task",
+                title: "Responsable actualizado",
+                detail: `El caso quedo asignado a ${ownerName}.`,
+                actor: actor?.name ?? "Sesion sin responsable activo",
+                createdAt: new Date().toISOString()
+              };
+
+              return {
+                ...entry,
+                owner: ownerName,
+                updatedAt: new Date().toISOString(),
+                events: [nextEvent, ...entry.events]
+              };
+            })()
+          : entry
+      );
+
+      return appendAuditLog(
+        {
+          ...currentState,
+          cases: nextCases
+        },
+        actor,
+        {
+          entityType: "case",
+          entityId: caseId,
+          action: "case-owner-updated",
+          detail: `Se asigno ${targetCase.internalNumber} a ${ownerName}.`
+        }
+      );
+    });
+  };
+
+  const updateCaseStatus = (caseId: string, status: ExternalStatus) => {
+    setState((currentState) => {
+      const actor = resolveActor(currentState);
+      const targetCase = currentState.cases.find((entry) => entry.id === caseId);
+      if (!targetCase || targetCase.externalStatus === status) return currentState;
+
+      const workflowState = workflowStates.find((entry) => entry.status === status);
+      const now = new Date().toISOString();
+
+      const nextCases: KingstonCase[] = currentState.cases.map((entry) => {
+        if (entry.id !== caseId) return entry;
+
+        const nextTasks: KingstonCase["tasks"] = entry.tasks.map((task) => {
+          if (status === "Realizado" || status === "Cerrado") {
+            return {
+              ...task,
+              state: "Completed"
+            };
+          }
+
+          if (status === "Vencido" && task.state !== "Completed") {
+            return {
+              ...task,
+              state: "Blocked"
+            };
+          }
+
+          return task;
+        });
+
+        const nextEvent: CaseEvent = {
+          id: createId("event"),
+          kind: "status-change",
+          title: `Estado actualizado a ${status}`,
+          detail: `El caso avanzo desde ${targetCase.externalStatus} hacia ${status}.`,
+          actor: actor?.name ?? "Sesion sin responsable activo",
+          createdAt: now
+        };
+
+        return {
+          ...entry,
+          externalStatus: status,
+          internalSubstatus: workflowState?.substatuses[0] ?? getInitialSubstatus(status),
+          nextAction: getNextActionCopy(status),
+          updatedAt: now,
+          logistics: {
+            ...entry.logistics,
+            deliveredDate:
+              status === "Realizado" && !entry.logistics.deliveredDate ? now : entry.logistics.deliveredDate
+          },
+          tasks: nextTasks,
+          events: [nextEvent, ...entry.events]
+        };
+      });
+
+      return appendAuditLog(
+        {
+          ...currentState,
+          cases: nextCases
+        },
+        actor,
+        {
+          entityType: "case",
+          entityId: caseId,
+          action: "case-status-updated",
+          detail: `${targetCase.internalNumber} cambio de ${targetCase.externalStatus} a ${status}.`
+        }
+      );
+    });
+  };
+
+  const recordCaseView = (caseId: string) => {
+    setState((currentState) => {
+      const actor = resolveActor(currentState);
+      const entry = currentState.cases.find((item) => item.id === caseId);
+      if (!entry) return currentState;
+
+      return appendAuditLog(currentState, actor, {
+        entityType: "case",
+        entityId: caseId,
+        action: "case-viewed",
+        detail: `Se consulto el caso ${entry.internalNumber}.`
+      });
+    });
+  };
+
+  const recordReportDownload = (reportName: string) => {
+    setState((currentState) => {
+      const actor = resolveActor(currentState);
+
+      return appendAuditLog(currentState, actor, {
+        entityType: "report",
+        entityId: reportName,
+        action: "report-downloaded",
+        detail: `Se descargo el reporte ${reportName}.`
+      });
+    });
+  };
+
+  const value = useMemo<KingestionContextValue>(
+    () => ({
+      ...state,
+      activeOwner,
+      openCases,
+      closedCases,
+      activeOwners,
+      dashboardSnapshot,
+      reportsSnapshot,
+      findCaseById,
+      setActiveOwner,
+      createOwner,
+      updateOwner,
+      deleteOwner,
+      assignCaseOwner,
+      updateCaseStatus,
+      recordCaseView,
+      recordReportDownload
+    }),
+    [
+      state,
+      activeOwner,
+      openCases,
+      closedCases,
+      activeOwners,
+      dashboardSnapshot,
+      reportsSnapshot
+    ]
+  );
+
+  return <KingestionContext.Provider value={value}>{children}</KingestionContext.Provider>;
+}
+
+export function useKingestion() {
+  const context = useContext(KingestionContext);
+
+  if (!context) {
+    throw new Error("useKingestion debe usarse dentro de KingestionProvider.");
+  }
+
+  return context;
+}
