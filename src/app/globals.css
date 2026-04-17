@@ -7,11 +7,16 @@
   --panel-soft: rgba(247, 250, 253, 0.92);
   --line: rgba(148, 163, 184, 0.22);
   --line-strong: rgba(148, 163, 184, 0.4);
-  --text: #0f172a;
-  --muted: rgba(15, 23, 42, 0.66);
+  --text: #0b1220;
+  --muted: rgba(15, 23, 42, 0.78);
+  --muted-strong: rgba(15, 23, 42, 0.84);
+  --muted-soft: rgba(15, 23, 42, 0.72);
+  --muted-faint: rgba(15, 23, 42, 0.62);
+  --muted-quiet: rgba(15, 23, 42, 0.54);
   --brand: #0f766e;
   --brand-soft: rgba(15, 118, 110, 0.12);
   --success: #4ade80;
+  --success-text: #166534;
   --warning: #fbbf24;
   --danger: #fb7185;
   --page-bg:
@@ -29,9 +34,14 @@ html[data-theme="dark"] {
   --line: rgba(148, 163, 184, 0.16);
   --line-strong: rgba(148, 163, 184, 0.3);
   --text: #f8fafc;
-  --muted: rgba(226, 232, 240, 0.66);
+  --muted: rgba(226, 232, 240, 0.68);
+  --muted-strong: rgba(226, 232, 240, 0.82);
+  --muted-soft: rgba(226, 232, 240, 0.76);
+  --muted-faint: rgba(226, 232, 240, 0.62);
+  --muted-quiet: rgba(226, 232, 240, 0.44);
   --brand: #7dd3fc;
   --brand-soft: rgba(125, 211, 252, 0.14);
+  --success-text: #dcfce7;
   --page-bg:
     radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 24%),
     linear-gradient(180deg, #09111d 0%, #0b1422 100%);
@@ -106,7 +116,7 @@ textarea {
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(226, 232, 240, 0.45);
+  color: var(--muted-quiet);
 }
 
 .workspace-nav-link {
@@ -139,7 +149,7 @@ textarea {
 .workspace-nav-link-hint {
   font-size: 0.78rem;
   line-height: 1.45;
-  color: rgba(226, 232, 240, 0.58);
+  color: var(--muted-faint);
 }
 
 .workspace-sidebar-summary {
@@ -172,7 +182,7 @@ textarea {
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(226, 232, 240, 0.44);
+  color: var(--muted-quiet);
 }
 
 .workspace-search-form {
@@ -259,7 +269,7 @@ textarea {
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(226, 232, 240, 0.44);
+  color: var(--muted-quiet);
 }
 
 .workspace-title {
@@ -302,7 +312,7 @@ textarea {
 .workspace-button-secondary {
   border: 1px solid var(--line);
   background: transparent;
-  color: rgba(226, 232, 240, 0.82);
+  color: var(--muted-strong);
 }
 
 .workspace-button:hover,
@@ -328,7 +338,7 @@ textarea {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(226, 232, 240, 0.78);
+  color: var(--muted-strong);
 }
 
 .workspace-chip-active {
@@ -351,7 +361,7 @@ textarea {
   padding: 0 0.95rem;
   font-size: 0.8rem;
   font-weight: 600;
-  color: rgba(226, 232, 240, 0.82);
+  color: var(--muted-strong);
   background: rgba(148, 163, 184, 0.06);
 }
 
@@ -395,7 +405,7 @@ textarea {
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(226, 232, 240, 0.45);
+  color: var(--muted-quiet);
 }
 
 .workspace-table td {
@@ -435,7 +445,7 @@ textarea {
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(226, 232, 240, 0.46);
+  color: var(--muted-quiet);
 }
 
 .workspace-input,
@@ -489,12 +499,12 @@ textarea {
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(226, 232, 240, 0.42);
+  color: var(--muted-quiet);
 }
 
 .workspace-data-item dd {
   margin: 0;
-  color: rgba(248, 250, 252, 0.92);
+  color: var(--text);
   line-height: 1.65;
 }
 
@@ -502,7 +512,7 @@ textarea {
   border: 1px dashed var(--line-strong);
   border-radius: 1rem;
   padding: 1rem;
-  color: rgba(226, 232, 240, 0.62);
+  color: var(--muted-faint);
 }
 
 .workspace-case-link {
@@ -519,7 +529,7 @@ textarea {
   margin-top: 0.3rem;
   font-size: 0.78rem;
   line-height: 1.5;
-  color: rgba(226, 232, 240, 0.44);
+  color: var(--muted-quiet);
 }
 
 .workspace-list-card {
@@ -566,7 +576,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.04);
-  color: rgba(226, 232, 240, 0.76);
+  color: var(--muted-soft);
   padding: 0.55rem 0.8rem;
   text-align: left;
   cursor: pointer;
@@ -587,7 +597,7 @@ textarea {
 .workflow-checklist-item-completed {
   border-color: rgba(74, 222, 128, 0.22);
   background: rgba(74, 222, 128, 0.12);
-  color: #dcfce7;
+  color: var(--success-text);
 }
 
 .workflow-checklist-dot {
@@ -648,17 +658,17 @@ textarea {
 }
 
 html[data-theme="light"] .workspace-shell [class*="text-white"] {
-  color: rgba(15, 23, 42, 0.92) !important;
+  color: rgba(11, 18, 32, 0.95) !important;
 }
 
 html[data-theme="light"] .workspace-shell [class*="text-white/82"] {
-  color: rgba(15, 23, 42, 0.82) !important;
+  color: rgba(11, 18, 32, 0.86) !important;
 }
 
 html[data-theme="light"] .workspace-shell [class*="text-white/78"],
 html[data-theme="light"] .workspace-shell [class*="text-white/76"],
 html[data-theme="light"] .workspace-shell [class*="text-white/74"] {
-  color: rgba(15, 23, 42, 0.76) !important;
+  color: rgba(11, 18, 32, 0.8) !important;
 }
 
 html[data-theme="light"] .workspace-shell [class*="text-white/70"],
@@ -669,7 +679,7 @@ html[data-theme="light"] .workspace-shell [class*="text-white/62"],
 html[data-theme="light"] .workspace-shell [class*="text-white/60"],
 html[data-theme="light"] .workspace-shell [class*="text-white/58"],
 html[data-theme="light"] .workspace-shell [class*="text-white/55"] {
-  color: rgba(15, 23, 42, 0.66) !important;
+  color: rgba(11, 18, 32, 0.74) !important;
 }
 
 html[data-theme="light"] .workspace-shell [class*="text-white/46"],
@@ -678,7 +688,7 @@ html[data-theme="light"] .workspace-shell [class*="text-white/44"],
 html[data-theme="light"] .workspace-shell [class*="text-white/42"],
 html[data-theme="light"] .workspace-shell [class*="text-white/40"],
 html[data-theme="light"] .workspace-shell [class*="text-white/38"] {
-  color: rgba(15, 23, 42, 0.46) !important;
+  color: rgba(11, 18, 32, 0.62) !important;
 }
 
 html[data-theme="light"] .workspace-shell [class*="bg-white/"] {
