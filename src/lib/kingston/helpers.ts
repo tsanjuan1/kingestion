@@ -267,10 +267,6 @@ export function getNextActionCopy(status: ExternalStatus) {
     return "Caso fuera de la bandeja operativa. No requiere una proxima accion abierta.";
   }
 
-  if (status === "Vencido") {
-    return "Esperar definicion para reapertura o cierre administrativo.";
-  }
-
   return getWorkflowState(status)?.description ?? "Definir proxima accion operativa.";
 }
 
@@ -379,9 +375,9 @@ export function getDashboardSnapshot(
 
   return {
     headlineMetrics: [
-      { label: "Casos abiertos", value: openCases.length, hint: "Bandeja operativa con estados activos y vencidos" },
+      { label: "Casos abiertos", value: openCases.length, hint: "Bandeja operativa con estados activos" },
       { label: "Casos cerrados", value: closedCases.length, hint: "Casos finalizados o cerrados administrativamente" },
-      { label: "SLA comprometido", value: taskBuckets.overdue.length, hint: "Tareas o casos ya vencidos" },
+      { label: "SLA comprometido", value: taskBuckets.overdue.length, hint: "Tareas o casos fuera de ventana" },
       {
         label: "Pedido a Kingston",
         value: openCases.filter((entry) => entry.externalStatus === "Pedido a Kingston").length,
@@ -446,7 +442,7 @@ export function getSearchParamValue(value: string | string[] | undefined): strin
 }
 
 export function getStatusTone(status: ExternalStatus) {
-  if (status === "Pedido a Kingston" || status === "Vencido") return "danger";
+  if (status === "Pedido a Kingston") return "danger";
   if (
     status === "Producto enviado" ||
     status === "Producto listo para retiro" ||
@@ -486,13 +482,12 @@ export function getReportsSnapshot(
     .sort((left, right) => right.value - left.value);
 
   const completedCases = cases.filter((entry) => entry.externalStatus === "Realizado");
-  const expiredCases = cases.filter((entry) => entry.externalStatus === "Vencido");
   const closedCases = getClosedCases(cases);
 
   return {
     throughput: [
       { label: "Realizados", value: completedCases.length, hint: "Casos finalizados con entrega confirmada" },
-      { label: "Vencidos", value: expiredCases.length, hint: "Casos caidos por falta de respuesta" },
+      { label: "Pedidos a Kingston", value: getOpenCases(cases).filter((entry) => entry.externalStatus === "Pedido a Kingston").length, hint: "Casos que dependen de reposicion o arribo" },
       { label: "Cerrados", value: closedCases.length, hint: "Casos derivados al archivo final" },
       {
         label: "Aging promedio",

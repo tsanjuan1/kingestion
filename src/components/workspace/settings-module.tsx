@@ -134,7 +134,7 @@ export function SettingsModule() {
                 <span>Sesion actual</span>
                 <select
                   className="workspace-select"
-                  value={activeOwner?.id ?? ""}
+                  value={activeOwner?.id ?? activeOwners[0]?.id ?? ""}
                   onChange={(event) => setActiveOwner(event.target.value)}
                 >
                   {activeOwners.map((owner) => (

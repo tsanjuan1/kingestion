@@ -97,7 +97,7 @@ export function CasesModule({ mode }: CasesModuleProps) {
             <MetricCard
               label="Abiertos"
               value={formatCount(openCases.length)}
-              hint="Casos operativos, incluyendo vencidos mientras no cierren."
+              hint="Casos operativos todavia dentro de la bandeja activa."
             />
             <MetricCard
               label="Envio o retiro"

@@ -1,19 +1,42 @@
 @import "tailwindcss";
 
 :root {
+  --bg: #f3f7fb;
+  --bg-soft: #eef4fa;
+  --panel: rgba(255, 255, 255, 0.82);
+  --panel-soft: rgba(247, 250, 253, 0.92);
+  --line: rgba(148, 163, 184, 0.22);
+  --line-strong: rgba(148, 163, 184, 0.4);
+  --text: #0f172a;
+  --muted: rgba(15, 23, 42, 0.66);
+  --brand: #0f766e;
+  --brand-soft: rgba(15, 118, 110, 0.12);
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --danger: #fb7185;
+  --page-bg:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.08), transparent 28%),
+    linear-gradient(180deg, #f7fafc 0%, #edf4fb 100%);
+  --sidebar-bg: rgba(239, 245, 250, 0.92);
+  --topbar-bg: rgba(247, 250, 253, 0.94);
+}
+
+html[data-theme="dark"] {
   --bg: #09111d;
   --bg-soft: #0d1727;
-  --panel: #101b2d;
-  --panel-soft: #152238;
+  --panel: rgba(16, 27, 45, 0.88);
+  --panel-soft: rgba(21, 34, 56, 0.92);
   --line: rgba(148, 163, 184, 0.16);
   --line-strong: rgba(148, 163, 184, 0.3);
   --text: #f8fafc;
   --muted: rgba(226, 232, 240, 0.66);
   --brand: #7dd3fc;
   --brand-soft: rgba(125, 211, 252, 0.14);
-  --success: #4ade80;
-  --warning: #fbbf24;
-  --danger: #fb7185;
+  --page-bg:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 24%),
+    linear-gradient(180deg, #09111d 0%, #0b1422 100%);
+  --sidebar-bg: rgba(9, 17, 29, 0.94);
+  --topbar-bg: rgba(9, 17, 29, 0.92);
 }
 
 * {
@@ -27,9 +50,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 24%),
-    linear-gradient(180deg, #09111d 0%, #0b1422 100%);
+  background: var(--page-bg);
   color: var(--text);
   font-family: var(--font-body), sans-serif;
 }
@@ -65,7 +86,7 @@ textarea {
   justify-content: space-between;
   gap: 2rem;
   border-right: 1px solid var(--line);
-  background: rgba(9, 17, 29, 0.94);
+  background: var(--sidebar-bg);
   padding: 1.5rem 1.15rem;
   backdrop-filter: blur(18px);
 }
@@ -77,7 +98,7 @@ textarea {
   font-size: 1.45rem;
   letter-spacing: -0.05em;
   text-transform: uppercase;
-  color: white;
+  color: var(--text);
 }
 
 .workspace-nav-group-title {
@@ -112,7 +133,7 @@ textarea {
 .workspace-nav-link-label {
   font-size: 0.95rem;
   font-weight: 600;
-  color: white;
+  color: var(--text);
 }
 
 .workspace-nav-link-hint {
@@ -124,7 +145,7 @@ textarea {
 .workspace-sidebar-summary {
   border: 1px solid var(--line);
   border-radius: 1.25rem;
-  background: rgba(16, 27, 45, 0.88);
+  background: var(--panel);
   padding: 1rem;
 }
 
@@ -141,7 +162,7 @@ textarea {
   align-items: end;
   gap: 1rem;
   border-bottom: 1px solid var(--line);
-  background: rgba(9, 17, 29, 0.92);
+  background: var(--topbar-bg);
   padding: 1rem 1.35rem;
   backdrop-filter: blur(14px);
 }
@@ -172,7 +193,7 @@ textarea {
   border: 1px solid var(--line);
   background: var(--panel);
   padding: 0 0.95rem;
-  color: white;
+  color: var(--text);
 }
 
 .workspace-search-input:focus {
@@ -199,6 +220,7 @@ textarea {
   background: var(--panel);
   font-size: 0.9rem;
   font-weight: 700;
+  color: var(--text);
 }
 
 .workspace-content {
@@ -227,7 +249,7 @@ textarea {
 .workspace-panel {
   border: 1px solid var(--line);
   border-radius: 1.2rem;
-  background: rgba(16, 27, 45, 0.88);
+  background: var(--panel);
   padding: 1.15rem;
   box-shadow: 0 14px 28px rgba(2, 6, 23, 0.18);
 }
@@ -245,7 +267,7 @@ textarea {
   font-size: clamp(2rem, 4vw, 3.1rem);
   line-height: 0.98;
   letter-spacing: -0.06em;
-  color: white;
+  color: var(--text);
 }
 
 .workspace-subtitle {
@@ -273,8 +295,8 @@ textarea {
 
 .workspace-button {
   border: 1px solid rgba(125, 211, 252, 0.28);
-  background: rgba(125, 211, 252, 0.16);
-  color: white;
+  background: var(--brand-soft);
+  color: var(--text);
 }
 
 .workspace-button-secondary {
@@ -336,7 +358,7 @@ textarea {
 .workspace-subnav-link-active {
   border-color: rgba(56, 189, 248, 0.3);
   background: rgba(56, 189, 248, 0.14);
-  color: white;
+  color: var(--text);
 }
 
 .workspace-grid-4 {
@@ -422,8 +444,8 @@ textarea {
   width: 100%;
   border-radius: 0.95rem;
   border: 1px solid var(--line);
-  background: #0f172a;
-  color: white;
+  background: var(--panel-soft);
+  color: var(--text);
   padding: 0.85rem 0.95rem;
 }
 
@@ -485,7 +507,7 @@ textarea {
 
 .workspace-case-link {
   font-weight: 700;
-  color: white;
+  color: var(--text);
   transition: color 140ms ease;
 }
 
@@ -559,7 +581,7 @@ textarea {
 .workflow-checklist-item-current {
   border-color: rgba(125, 211, 252, 0.28);
   background: rgba(125, 211, 252, 0.16);
-  color: white;
+  color: var(--text);
 }
 
 .workflow-checklist-item-completed {
@@ -581,10 +603,94 @@ textarea {
   font-weight: 700;
 }
 
+.workspace-topbar-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-self: end;
+}
+
+.workspace-theme-switcher {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.workspace-theme-buttons {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  padding: 0.2rem;
+}
+
+.workspace-theme-button {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  min-height: 2rem;
+  padding: 0 0.85rem;
+}
+
+.workspace-theme-button-active {
+  background: var(--brand-soft);
+  color: var(--text);
+}
+
 .workflow-checklist-label {
   font-size: 0.78rem;
   font-weight: 600;
   line-height: 1.35;
+}
+
+html[data-theme="light"] .workspace-shell [class*="text-white"] {
+  color: rgba(15, 23, 42, 0.92) !important;
+}
+
+html[data-theme="light"] .workspace-shell [class*="text-white/82"] {
+  color: rgba(15, 23, 42, 0.82) !important;
+}
+
+html[data-theme="light"] .workspace-shell [class*="text-white/78"],
+html[data-theme="light"] .workspace-shell [class*="text-white/76"],
+html[data-theme="light"] .workspace-shell [class*="text-white/74"] {
+  color: rgba(15, 23, 42, 0.76) !important;
+}
+
+html[data-theme="light"] .workspace-shell [class*="text-white/70"],
+html[data-theme="light"] .workspace-shell [class*="text-white/68"],
+html[data-theme="light"] .workspace-shell [class*="text-white/66"],
+html[data-theme="light"] .workspace-shell [class*="text-white/64"],
+html[data-theme="light"] .workspace-shell [class*="text-white/62"],
+html[data-theme="light"] .workspace-shell [class*="text-white/60"],
+html[data-theme="light"] .workspace-shell [class*="text-white/58"],
+html[data-theme="light"] .workspace-shell [class*="text-white/55"] {
+  color: rgba(15, 23, 42, 0.66) !important;
+}
+
+html[data-theme="light"] .workspace-shell [class*="text-white/46"],
+html[data-theme="light"] .workspace-shell [class*="text-white/45"],
+html[data-theme="light"] .workspace-shell [class*="text-white/44"],
+html[data-theme="light"] .workspace-shell [class*="text-white/42"],
+html[data-theme="light"] .workspace-shell [class*="text-white/40"],
+html[data-theme="light"] .workspace-shell [class*="text-white/38"] {
+  color: rgba(15, 23, 42, 0.46) !important;
+}
+
+html[data-theme="light"] .workspace-shell [class*="bg-white/"] {
+  background-color: rgba(15, 23, 42, 0.04) !important;
+}
+
+html[data-theme="light"] .workspace-shell [class*="border-white/"] {
+  border-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+html[data-theme="light"] .workspace-shell .workspace-link-button-danger {
+  color: #be123c !important;
 }
 
 @media (max-width: 1180px) {
@@ -625,6 +731,11 @@ textarea {
 
   .workspace-cases-table td:last-child {
     min-width: 18rem;
+  }
+
+  .workspace-topbar-controls {
+    justify-self: stretch;
+    justify-content: space-between;
   }
 }
 

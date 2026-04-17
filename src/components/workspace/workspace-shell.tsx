@@ -45,10 +45,10 @@ function getSearchAction(pathname: string) {
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { activeOwner, dashboardSnapshot } = useKingestion();
+  const { activeOwner, dashboardSnapshot, themeMode, setThemeMode } = useKingestion();
 
   return (
-    <div className="workspace-shell">
+    <div className={`workspace-shell theme-${themeMode}`}>
       <aside className="workspace-sidebar">
         <div className="space-y-8">
           <div className="space-y-3">
@@ -92,7 +92,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               </strong>
             </div>
             <div className="flex items-center justify-between">
-              <span>SLA vencido</span>
+              <span>Tareas vencidas</span>
               <strong className="text-white">{dashboardSnapshot.taskBuckets.overdue.length}</strong>
             </div>
           </div>
@@ -110,17 +110,39 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             <WorkspaceSearchForm action={getSearchAction(pathname)} />
           </Suspense>
 
-          <Link className="workspace-user" href="/settings?view=responsables">
-            <div className="workspace-user-badge">
-              {getOwnerInitials(activeOwner?.name ?? "Sin sesion")}
-            </div>
-            <div className="hidden text-right md:block">
-              <div className="workspace-topbar-label">Usuario activo</div>
-              <div className="text-sm font-medium text-white">
-                {activeOwner?.name ?? "Sin responsable activo"}
+          <div className="workspace-topbar-controls">
+            <div className="workspace-theme-switcher">
+              <div className="workspace-topbar-label">Modo</div>
+              <div className="workspace-theme-buttons">
+                <button
+                  type="button"
+                  className={`workspace-theme-button ${themeMode === "light" ? "workspace-theme-button-active" : ""}`}
+                  onClick={() => setThemeMode("light")}
+                >
+                  Claro
+                </button>
+                <button
+                  type="button"
+                  className={`workspace-theme-button ${themeMode === "dark" ? "workspace-theme-button-active" : ""}`}
+                  onClick={() => setThemeMode("dark")}
+                >
+                  Oscuro
+                </button>
               </div>
             </div>
-          </Link>
+
+            <Link className="workspace-user" href="/settings?view=responsables">
+              <div className="workspace-user-badge">
+                {getOwnerInitials(activeOwner?.name ?? "Sin sesion")}
+              </div>
+              <div className="hidden text-right md:block">
+                <div className="workspace-topbar-label">Usuario activo</div>
+                <div className="text-sm font-medium text-white">
+                  {activeOwner?.name ?? "Sin responsable activo"}
+                </div>
+              </div>
+            </Link>
+          </div>
         </header>
 
         <main className="workspace-content">{children}</main>

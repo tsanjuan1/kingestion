@@ -24,7 +24,6 @@ export type ExternalStatus =
   | "Producto enviado"
   | "Producto listo para retiro"
   | "Realizado"
-  | "Vencido"
   | "Cerrado";
 
 export type WorkflowCategory = "active" | "delivery" | "terminal";

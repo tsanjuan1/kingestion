@@ -112,16 +112,9 @@ export const workflowStates: WorkflowState[] = [
     substatuses: ["Cambio exitoso", "Caso finalizado"]
   },
   {
-    status: "Vencido",
-    category: "terminal",
-    order: 10,
-    description: "El caso vencio por falta de respuesta o por agotamiento del SLA operativo.",
-    substatuses: ["Sin respuesta del cliente", "Caso vencido"]
-  },
-  {
     status: "Cerrado",
     category: "terminal",
-    order: 11,
+    order: 10,
     description: "El caso fue cancelado o cerrado administrativamente por decision interna o de Kingston.",
     substatuses: ["Caso cerrado por Kingston", "Caso cancelado administrativamente"]
   }
@@ -461,7 +454,7 @@ export const kingstonCases: KingstonCase[] = [
     failureDescription: "Modulo no reconocido despues de update de BIOS.",
     origin: "Commercial handoff",
     observations:
-      "Cliente recibio instructivo pero no envio evidencia. Si no responde hoy debe evaluarse paso a vencido.",
+      "Cliente recibio instructivo pero no envio evidencia. Si no responde hoy debe evaluarse un cierre administrativo.",
     logistics: {
       mode: "Dispatch",
       address: "San Martin 1462, Godoy Cruz",
@@ -615,8 +608,8 @@ export const kingstonCases: KingstonCase[] = [
     priority: "Low",
     owner: "Sofia Mendez",
     nextAction: "Revisar si corresponde reapertura o archivo definitivo",
-    externalStatus: "Vencido",
-    internalSubstatus: "Sin respuesta del cliente",
+    externalStatus: "Cerrado",
+    internalSubstatus: "Caso cancelado administrativamente",
     openedAt: "2026-03-28T14:30:00-03:00",
     updatedAt: "2026-04-14T16:00:00-03:00",
     slaDueAt: "2026-04-10T18:00:00-03:00",
@@ -628,7 +621,7 @@ export const kingstonCases: KingstonCase[] = [
     quantity: 7,
     failureDescription: "Lote con corrupcion de datos reportada por comercio.",
     origin: "Operations load",
-    observations: "Cliente no respondio a tres seguimientos. Caso vencido segun regla operativa.",
+    observations: "Cliente no respondio a tres seguimientos. Caso cerrado administrativamente por falta de respuesta.",
     logistics: {
       mode: "Pickup",
       address: "Mostrador central ANYX",
@@ -668,7 +661,7 @@ export const kingstonCases: KingstonCase[] = [
       {
         id: "comment-24034-1",
         author: "Sofia Mendez",
-        body: "Caso vencido por falta de respuesta a los tres contactos registrados.",
+        body: "Caso cerrado por falta de respuesta a los tres contactos registrados.",
         internal: true,
         createdAt: "2026-04-14T16:00:00-03:00"
       }
@@ -678,8 +671,8 @@ export const kingstonCases: KingstonCase[] = [
       {
         id: "event-24034-1",
         kind: "status-change",
-        title: "Caso marcado como vencido",
-        detail: "Se aplico regla por falta de respuesta del cliente.",
+        title: "Caso cerrado por falta de respuesta",
+        detail: "Se cerro administrativamente luego de agotar los seguimientos al cliente.",
         actor: "Sofia Mendez",
         createdAt: "2026-04-14T16:00:00-03:00"
       }

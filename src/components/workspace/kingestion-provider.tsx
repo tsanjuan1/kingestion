@@ -21,13 +21,15 @@ import type {
   UserInteractionLog
 } from "@/lib/kingston/types";
 
-const STORAGE_KEY = "kingestion.workspace.v3";
+const STORAGE_KEY = "kingestion.workspace.v4";
+export type ThemeMode = "light" | "dark";
 
 type WorkspaceState = {
   cases: KingstonCase[];
   owners: OwnerDirectoryEntry[];
   auditLog: UserInteractionLog[];
   activeOwnerId: string | null;
+  themeMode: ThemeMode;
 };
 
 type OwnerInput = {
@@ -46,6 +48,7 @@ type KingestionContextValue = WorkspaceState & {
   reportsSnapshot: ReturnType<typeof getReportsSnapshot>;
   findCaseById: (caseId: string) => KingstonCase | undefined;
   setActiveOwner: (ownerId: string) => void;
+  setThemeMode: (themeMode: ThemeMode) => void;
   createOwner: (input: OwnerInput) => void;
   updateOwner: (ownerId: string, input: OwnerInput) => void;
   deleteOwner: (ownerId: string) => void;
@@ -320,6 +323,14 @@ const archivedCasesSeed: KingstonCase[] = [
 
 const KingestionContext = createContext<KingestionContextValue | null>(null);
 
+function normalizeStatus(status: string): ExternalStatus {
+  if (status === "Vencido") {
+    return "Cerrado";
+  }
+
+  return status as ExternalStatus;
+}
+
 function createId(prefix: string) {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `${prefix}-${crypto.randomUUID()}`;
@@ -344,6 +355,8 @@ function normalizeOwner(owner: OwnerDirectoryEntry): OwnerDirectoryEntry {
 }
 
 function normalizeCase(entry: KingstonCase): KingstonCase {
+  const normalizedStatus = normalizeStatus(entry.externalStatus);
+  const hadLegacyExpiredStatus = (entry as { externalStatus: string }).externalStatus === "Vencido";
   const clientDetails = clientDirectory[entry.clientName];
   const baseAddress = clientDetails?.fullAddress ?? buildCaseAddress(entry);
   const logisticsAddress =
@@ -351,10 +364,14 @@ function normalizeCase(entry: KingstonCase): KingstonCase {
 
   return {
     ...entry,
+    externalStatus: normalizedStatus,
     address: baseAddress,
     banking: entry.banking ?? clientDetails?.banking,
-    nextAction: entry.nextAction || getNextActionCopy(entry.externalStatus),
-    internalSubstatus: entry.internalSubstatus || getInitialSubstatus(entry.externalStatus),
+    nextAction: entry.nextAction || getNextActionCopy(normalizedStatus),
+    internalSubstatus:
+      entry.internalSubstatus && !hadLegacyExpiredStatus
+        ? entry.internalSubstatus
+        : getInitialSubstatus(normalizedStatus),
     logistics: {
       ...entry.logistics,
       address: logisticsAddress
@@ -371,7 +388,8 @@ function createDefaultState(): WorkspaceState {
     cases,
     owners,
     auditLog: [],
-    activeOwnerId
+    activeOwnerId,
+    themeMode: "light"
   };
 }
 
@@ -392,7 +410,8 @@ function restoreState(rawState: string): WorkspaceState {
     owners,
     cases,
     auditLog: Array.isArray(parsed.auditLog) ? parsed.auditLog : [],
-    activeOwnerId
+    activeOwnerId,
+    themeMode: parsed.themeMode === "dark" ? "dark" : "light"
   };
 }
 
@@ -446,8 +465,33 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [isHydrated, state]);
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = state.themeMode;
+  }, [state.themeMode]);
+
+  useEffect(() => {
+    if (state.activeOwnerId) return;
+
+    const fallbackOwner = state.owners.find((owner) => owner.active);
+    if (!fallbackOwner) return;
+
+    setState((currentState) => {
+      if (currentState.activeOwnerId) {
+        return currentState;
+      }
+
+      return {
+        ...currentState,
+        activeOwnerId: fallbackOwner.id
+      };
+    });
+  }, [state.activeOwnerId, state.owners]);
+
   const activeOwner = useMemo(
-    () => state.owners.find((owner) => owner.id === state.activeOwnerId) ?? null,
+    () =>
+      state.owners.find((owner) => owner.id === state.activeOwnerId && owner.active) ??
+      state.owners.find((owner) => owner.active) ??
+      null,
     [state.activeOwnerId, state.owners]
   );
 
@@ -489,6 +533,13 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
     });
   };
 
+  const setThemeMode = (themeMode: ThemeMode) => {
+    setState((currentState) => ({
+      ...currentState,
+      themeMode
+    }));
+  };
+
   const createOwner = (input: OwnerInput) => {
     setState((currentState) => {
       const actor = resolveActor(currentState);
@@ -504,7 +555,10 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
       return appendAuditLog(
         {
           ...currentState,
-          owners: [...currentState.owners, nextOwner]
+          owners: [...currentState.owners, nextOwner],
+          activeOwnerId:
+            currentState.activeOwnerId ??
+            (nextOwner.active ? nextOwner.id : null)
         },
         actor,
         {
@@ -680,13 +734,6 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
             };
           }
 
-          if (status === "Vencido" && task.state !== "Completed") {
-            return {
-              ...task,
-              state: "Blocked"
-            };
-          }
-
           return task;
         });
 
@@ -766,10 +813,12 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
       openCases,
       closedCases,
       activeOwners,
+      themeMode: state.themeMode,
       dashboardSnapshot,
       reportsSnapshot,
       findCaseById,
       setActiveOwner,
+      setThemeMode,
       createOwner,
       updateOwner,
       deleteOwner,
