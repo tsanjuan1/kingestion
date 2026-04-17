@@ -1,17 +1,55 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import { getDashboardSnapshot, getOwnerInitials } from "@/lib/kingston/helpers";
 
-const primaryNavigation = [
-  { href: "/dashboard", label: "Dashboard", hint: "Pulse and bottlenecks" },
-  { href: "/cases", label: "Cases", hint: "Open queue and filters" },
-  { href: "/tasks", label: "Tasks", hint: "Ownership and due dates" },
-  { href: "/reports", label: "Reports", hint: "Throughput and aging" },
-  { href: "/admin/workflow", label: "Workflow", hint: "States and rules" }
+const navigationGroups = [
+  {
+    title: "Inicio",
+    items: [{ href: "/dashboard", label: "Resumen", hint: "Estado general y prioridades" }]
+  },
+  {
+    title: "Casos",
+    items: [
+      { href: "/cases", label: "Bandeja", hint: "Casos abiertos y filtros" },
+      { href: "/cases/new", label: "Nuevo caso", hint: "Alta y vista previa" }
+    ]
+  },
+  {
+    title: "Operacion",
+    items: [
+      { href: "/tasks", label: "Tareas", hint: "Vencimientos y responsables" },
+      { href: "/reports", label: "Reportes", hint: "Aging y volumen" }
+    ]
+  },
+  {
+    title: "Configuracion",
+    items: [{ href: "/admin/workflow", label: "Flujo", hint: "Estados y reglas" }]
+  }
 ];
+
+function isActive(pathname: string, href: string) {
+  if (href === "/cases") {
+    return pathname === "/cases" || pathname.startsWith("/cases/");
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function getPageLabel(pathname: string) {
+  if (pathname.startsWith("/cases/new")) return "Nuevo caso";
+  if (pathname.startsWith("/cases/")) return "Detalle del caso";
+  if (pathname.startsWith("/cases")) return "Bandeja de casos";
+  if (pathname.startsWith("/tasks")) return "Tareas";
+  if (pathname.startsWith("/reports")) return "Reportes";
+  if (pathname.startsWith("/admin/workflow")) return "Flujo";
+  if (pathname.startsWith("/login")) return "Acceso";
+
+  return "Resumen";
+}
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -20,78 +58,118 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="workspace-shell">
       <aside className="workspace-sidebar">
-        <div>
-          <Link href="/dashboard" className="text-[1.28rem] font-[var(--font-display)] tracking-[0.08em] text-white">
-            KINGESTION
-          </Link>
-          <p className="mt-3 max-w-[14rem] text-sm leading-7 text-white/48">
-            Kingston RMA control desk. Cases, actions, SLA and traceability in one place.
-          </p>
+        <div className="space-y-8">
+          <div className="space-y-3">
+            <Link href="/dashboard" className="workspace-brand">
+              kingestion
+            </Link>
+            <p className="text-sm leading-6 text-white/55">
+              Gestion interna de casos Kingston para ANYX. Separada de Anyx Comercial.
+            </p>
+          </div>
+
+          <nav className="space-y-6">
+            {navigationGroups.map((group) => (
+              <div key={group.title} className="space-y-2">
+                <div className="workspace-nav-group-title">{group.title}</div>
+                <div className="space-y-1.5">
+                  {group.items.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`workspace-nav-link ${isActive(pathname, item.href) ? "workspace-nav-link-active" : ""}`}
+                    >
+                      <span className="workspace-nav-link-label">{item.label}</span>
+                      <span className="workspace-nav-link-hint">{item.hint}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </nav>
         </div>
 
-        <nav className="mt-10 space-y-2">
-          {primaryNavigation.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`block rounded-[1.15rem] border px-4 py-3 transition ${
-                  active
-                    ? "border-[rgba(123,214,145,0.32)] bg-[rgba(123,214,145,0.12)] text-white"
-                    : "border-transparent bg-transparent text-white/54 hover:border-white/8 hover:bg-white/4 hover:text-white"
-                }`}
-              >
-                <div className="text-sm font-semibold uppercase tracking-[0.16em]">{item.label}</div>
-                <div className="mt-1 text-xs leading-6 text-white/42">{item.hint}</div>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="mt-8 rounded-[1.4rem] border border-white/10 bg-white/4 px-4 py-4">
-          <p className="workspace-kicker">Queues</p>
-          <div className="mt-4 space-y-3 text-sm text-white/64">
+        <div className="workspace-sidebar-summary">
+          <p className="workspace-kicker">Hoy</p>
+          <div className="space-y-2.5 text-sm text-white/66">
             <div className="flex items-center justify-between">
-              <span>Open cases</span>
-              <span className="font-semibold text-white">{snapshot.openCases.length}</span>
+              <span>Casos abiertos</span>
+              <strong className="text-white">{snapshot.openCases.length}</strong>
             </div>
             <div className="flex items-center justify-between">
-              <span>Overdue tasks</span>
-              <span className="font-semibold text-white">{snapshot.taskBuckets.overdue.length}</span>
+              <span>Tareas vencidas</span>
+              <strong className="text-white">{snapshot.taskBuckets.overdue.length}</strong>
             </div>
             <div className="flex items-center justify-between">
-              <span>Pickup ready</span>
-              <span className="font-semibold text-white">
+              <span>Listos para retiro</span>
+              <strong className="text-white">
                 {snapshot.openCases.filter((entry) => entry.externalStatus === "Producto listo para retiro").length}
-              </span>
+              </strong>
             </div>
           </div>
-          <Link href="/cases/new" className="workspace-button mt-5 w-full justify-center">
-            New case
-          </Link>
         </div>
       </aside>
 
       <div className="workspace-main">
         <header className="workspace-topbar">
-          <div className="workspace-search">
-            <span className="text-xs uppercase tracking-[0.16em] text-white/34">Search</span>
-            <div className="mt-1 text-sm text-white/68">Case number, Kingston ticket, client, SKU</div>
+          <div className="space-y-1">
+            <div className="workspace-topbar-label">Modulo actual</div>
+            <div className="text-lg font-semibold text-white">{getPageLabel(pathname)}</div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="hidden rounded-full border border-white/10 bg-white/4 px-4 py-2 text-xs uppercase tracking-[0.16em] text-white/56 md:block">
-              Separate from Anyx Comercial
-            </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold text-white">
-              {getOwnerInitials("Sofia Mendez")}
+          <Suspense fallback={<WorkspaceSearchFallback />}>
+            <WorkspaceSearchForm />
+          </Suspense>
+
+          <div className="workspace-user">
+            <div className="workspace-user-badge">{getOwnerInitials("Sofia Mendez")}</div>
+            <div className="hidden text-right md:block">
+              <div className="workspace-topbar-label">Sesion</div>
+              <div className="text-sm font-medium text-white">Operacion ANYX</div>
             </div>
           </div>
         </header>
 
         <main className="workspace-content">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+function WorkspaceSearchForm() {
+  const searchParams = useSearchParams();
+  const currentSearch = searchParams.get("q") ?? "";
+
+  return (
+    <form action="/cases" className="workspace-search-form">
+      <label htmlFor="workspace-search" className="workspace-topbar-label">
+        Buscar caso
+      </label>
+      <div className="workspace-search-row">
+        <input
+          id="workspace-search"
+          name="q"
+          defaultValue={currentSearch}
+          className="workspace-search-input"
+          placeholder="Numero, ticket Kingston, cliente o SKU"
+        />
+        <button className="workspace-button" type="submit">
+          Buscar
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function WorkspaceSearchFallback() {
+  return (
+    <div className="workspace-search-form">
+      <div className="workspace-topbar-label">Buscar caso</div>
+      <div className="workspace-search-row">
+        <input className="workspace-search-input" placeholder="Numero, ticket Kingston, cliente o SKU" />
+        <button className="workspace-button" type="button">
+          Buscar
+        </button>
       </div>
     </div>
   );

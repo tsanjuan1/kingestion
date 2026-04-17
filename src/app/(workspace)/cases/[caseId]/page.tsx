@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EventTimeline } from "@/components/workspace/event-timeline";
+import { ModuleSubnav } from "@/components/workspace/module-subnav";
 import { SectionPanel } from "@/components/workspace/section-panel";
 import { StatusPill } from "@/components/workspace/status-pill";
 import { TaskList } from "@/components/workspace/task-list";
@@ -9,19 +10,29 @@ import { transitionRules } from "@/lib/kingston/data";
 import {
   formatDate,
   formatDateTime,
+  getAttachmentKindLabel,
+  getAvailabilityLabel,
   getCaseAgingDays,
   getCaseById,
+  getDeliveryModeLabel,
+  getOriginLabel,
   getOwnerInitials,
   getOwnerTeam,
-  getSlaLabel
+  getPriorityLabel,
+  getReimbursementStateLabel,
+  getSlaLabel,
+  getTeamLabel
 } from "@/lib/kingston/helpers";
 
 type CaseDetailPageProps = {
   params: Promise<{ caseId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
+export default async function CaseDetailPage({ params, searchParams }: CaseDetailPageProps) {
   const { caseId } = await params;
+  const resolved = await searchParams;
+  const tab = Array.isArray(resolved.tab) ? resolved.tab[0] : resolved.tab ?? "resumen";
   const entry = getCaseById(caseId);
 
   if (!entry) {
@@ -35,22 +46,29 @@ export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
     caseNumber: entry.internalNumber,
     clientName: entry.clientName
   }));
+  const caseTabs = [
+    { href: `/cases/${entry.id}?tab=resumen`, label: "Resumen", active: tab === "resumen" },
+    { href: `/cases/${entry.id}?tab=cliente`, label: "Cliente", active: tab === "cliente" },
+    { href: `/cases/${entry.id}?tab=producto`, label: "Producto", active: tab === "producto" },
+    { href: `/cases/${entry.id}?tab=operacion`, label: "Operacion", active: tab === "operacion" },
+    { href: `/cases/${entry.id}?tab=historial`, label: "Historial", active: tab === "historial" }
+  ];
 
   return (
     <div className="workspace-page">
       <header className="workspace-page-header">
         <div className="workspace-page-header-row">
           <div>
-            <p className="workspace-kicker">Cases / Detail</p>
+            <p className="workspace-kicker">Casos</p>
             <h1 className="workspace-title">{entry.internalNumber}</h1>
           </div>
 
           <div className="workspace-chip-row">
             <Link className="workspace-button-secondary" href="/cases">
-              Back to desk
+              Volver a la bandeja
             </Link>
-            <Link className="workspace-button" href="/cases/new">
-              Create follow-up case
+            <Link className="workspace-button" href="/tasks">
+              Ir a tareas
             </Link>
           </div>
         </div>
@@ -58,59 +76,111 @@ export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
         <div className="workspace-chip-row">
           <StatusPill kind="status" value={entry.externalStatus} />
           <StatusPill kind="sla" value={entry.slaDueAt} label={getSlaLabel(entry.slaDueAt)} />
-          <span className="workspace-chip workspace-chip-active">{entry.priority} priority</span>
-          <span className="workspace-chip">{entry.zone}</span>
-          <span className="workspace-chip">{entry.deliveryMode}</span>
+          <span className="workspace-chip">{getPriorityLabel(entry.priority)}</span>
+          <span className="workspace-chip">{getDeliveryModeLabel(entry.deliveryMode)}</span>
         </div>
 
         <p className="workspace-subtitle">
-          {entry.clientName} / {entry.productDescription}. Current owner is {entry.owner} from {getOwnerTeam(entry.owner)} and the active substatus is{" "}
-          {entry.internalSubstatus}.
+          {entry.clientName} / {entry.productDescription}. El responsable actual es {entry.owner} ({getTeamLabel(getOwnerTeam(entry.owner))}) y el subestado activo es {entry.internalSubstatus}.
         </p>
       </header>
 
-      <section className="workspace-grid-4">
-        <article className="workspace-panel space-y-3">
-          <p className="workspace-kicker">Current owner</p>
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/6 text-sm font-semibold text-white">
-              {getOwnerInitials(entry.owner)}
-            </div>
-            <div>
-              <div className="text-lg font-semibold text-white">{entry.owner}</div>
-              <div className="text-sm text-white/56">{getOwnerTeam(entry.owner)}</div>
-            </div>
+      <ModuleSubnav items={caseTabs} />
+
+      {tab === "resumen" ? (
+        <>
+          <section className="workspace-grid-4">
+            <article className="workspace-panel space-y-3">
+              <p className="workspace-kicker">Responsable</p>
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/6 text-sm font-semibold text-white">
+                  {getOwnerInitials(entry.owner)}
+                </div>
+                <div>
+                  <div className="text-base font-semibold text-white">{entry.owner}</div>
+                  <div className="text-sm text-white/58">{getTeamLabel(getOwnerTeam(entry.owner))}</div>
+                </div>
+              </div>
+            </article>
+
+            <article className="workspace-panel space-y-3">
+              <p className="workspace-kicker">Proxima accion</p>
+              <div className="text-base font-semibold text-white">{entry.nextAction}</div>
+              <div className="text-sm text-white/58">Actualizado {formatDateTime(entry.updatedAt)}</div>
+            </article>
+
+            <article className="workspace-panel space-y-3">
+              <p className="workspace-kicker">Aging</p>
+              <div className="text-4xl font-[var(--font-display)] tracking-[-0.06em] text-white">{getCaseAgingDays(entry)}d</div>
+              <div className="text-sm text-white/58">Abierto {formatDate(entry.openedAt)}</div>
+            </article>
+
+            <article className="workspace-panel space-y-3">
+              <p className="workspace-kicker">Ticket Kingston</p>
+              <div className="text-base font-semibold text-white">{entry.kingstonNumber}</div>
+              <div className="text-sm text-white/58">Origen {getOriginLabel(entry.origin)}</div>
+            </article>
+          </section>
+
+          <div className="workspace-grid-2">
+            <SectionPanel title="Resumen del caso" description="Datos esenciales para ubicar el caso dentro de la operacion.">
+              <dl className="workspace-data-list">
+                <div className="workspace-data-item">
+                  <dt>Cliente</dt>
+                  <dd>{entry.clientName}</dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>SKU</dt>
+                  <dd>{entry.sku}</dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Cantidad</dt>
+                  <dd>{entry.quantity} unidades</dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Zona y modalidad</dt>
+                  <dd>
+                    {entry.zone} / {getDeliveryModeLabel(entry.deliveryMode)}
+                  </dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Observaciones</dt>
+                  <dd>{entry.observations}</dd>
+                </div>
+              </dl>
+            </SectionPanel>
+
+            <SectionPanel title="Transiciones validas" description="Siguientes movimientos permitidos para este estado.">
+              <div className="space-y-3">
+                {nextTransitions.length > 0 ? (
+                  nextTransitions.map((rule) => (
+                    <article key={`${rule.from}-${rule.to}`} className="rounded-[1rem] border border-white/10 bg-white/4 px-4 py-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="workspace-chip">{rule.from}</span>
+                        <span className="text-sm text-white/58">a</span>
+                        <span className="workspace-chip workspace-chip-active">{rule.to}</span>
+                      </div>
+                      <p className="mt-3 text-sm leading-7 text-white/66">{rule.note}</p>
+                    </article>
+                  ))
+                ) : (
+                  <div className="workspace-empty">No hay una transicion configurada para este estado.</div>
+                )}
+              </div>
+            </SectionPanel>
           </div>
-        </article>
+        </>
+      ) : null}
 
-        <article className="workspace-panel space-y-3">
-          <p className="workspace-kicker">Next action</p>
-          <div className="text-lg font-semibold text-white">{entry.nextAction}</div>
-          <div className="text-sm text-white/56">Updated {formatDateTime(entry.updatedAt)}</div>
-        </article>
-
-        <article className="workspace-panel space-y-3">
-          <p className="workspace-kicker">Aging</p>
-          <div className="text-4xl font-[var(--font-display)] tracking-[-0.06em] text-white">{getCaseAgingDays(entry)}d</div>
-          <div className="text-sm text-white/56">Opened {formatDate(entry.openedAt)}</div>
-        </article>
-
-        <article className="workspace-panel space-y-3">
-          <p className="workspace-kicker">Kingston ref</p>
-          <div className="text-lg font-semibold text-white">{entry.kingstonNumber}</div>
-          <div className="text-sm text-white/56">Origin {entry.origin}</div>
-        </article>
-      </section>
-
-      <div className="workspace-grid-2">
-        <SectionPanel title="Customer" description="Who owns the issue on the customer side and how the delivery branch should behave.">
+      {tab === "cliente" ? (
+        <SectionPanel title="Datos del cliente" description="Contacto y ubicacion para seguimiento y entrega.">
           <dl className="workspace-data-list">
             <div className="workspace-data-item">
-              <dt>Client</dt>
+              <dt>Cliente</dt>
               <dd>{entry.clientName}</dd>
             </div>
             <div className="workspace-data-item">
-              <dt>Contact</dt>
+              <dt>Contacto</dt>
               <dd>{entry.contactName}</dd>
             </div>
             <div className="workspace-data-item">
@@ -118,200 +188,157 @@ export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
               <dd>{entry.contactEmail}</dd>
             </div>
             <div className="workspace-data-item">
-              <dt>Phone</dt>
+              <dt>Telefono</dt>
               <dd>{entry.contactPhone}</dd>
             </div>
             <div className="workspace-data-item">
-              <dt>Address</dt>
+              <dt>Direccion</dt>
               <dd>
                 {entry.address}, {entry.city}, {entry.province}
               </dd>
             </div>
             <div className="workspace-data-item">
-              <dt>Zone and delivery</dt>
-              <dd>
-                {entry.zone} / {entry.deliveryMode}
-              </dd>
+              <dt>Zona</dt>
+              <dd>{entry.zone}</dd>
             </div>
           </dl>
         </SectionPanel>
+      ) : null}
 
-        <SectionPanel title="Product" description="Fault, quantity and evidence context for technical and procurement decisions.">
-          <dl className="workspace-data-list">
-            <div className="workspace-data-item">
-              <dt>SKU</dt>
-              <dd>{entry.sku}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Description</dt>
-              <dd>{entry.productDescription}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Quantity</dt>
-              <dd>{entry.quantity}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Failure description</dt>
-              <dd>{entry.failureDescription}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Operational observations</dt>
-              <dd>{entry.observations}</dd>
-            </div>
-          </dl>
-        </SectionPanel>
-      </div>
-
-      <div className="workspace-grid-2">
-        <SectionPanel title="Logistics" description="Dispatch or pickup data needed to complete the last mile without email chasing.">
-          <dl className="workspace-data-list">
-            <div className="workspace-data-item">
-              <dt>Mode</dt>
-              <dd>{entry.logistics.mode}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Delivery address</dt>
-              <dd>{entry.logistics.address}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Transporter</dt>
-              <dd>{entry.logistics.transporter ?? "Pending definition"}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Guide</dt>
-              <dd>{entry.logistics.guideNumber ?? "Not assigned yet"}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Dispatch / delivery</dt>
-              <dd>
-                {(entry.logistics.dispatchDate && formatDateTime(entry.logistics.dispatchDate)) ?? "Dispatch pending"} /{" "}
-                {(entry.logistics.deliveredDate && formatDateTime(entry.logistics.deliveredDate)) ?? "Delivery pending"}
-              </dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Tracking</dt>
-              <dd>
-                {entry.logistics.trackingUrl ? (
-                  <a className="text-[#8de7dc]" href={entry.logistics.trackingUrl} target="_blank" rel="noreferrer">
-                    Open tracking
-                  </a>
-                ) : (
-                  "No tracking loaded"
-                )}
-              </dd>
-            </div>
-          </dl>
-        </SectionPanel>
-
-        <SectionPanel title="Procurement and Kingston" description="Stock path, supplier dependency and warehouse readiness in a single view.">
-          <dl className="workspace-data-list">
-            <div className="workspace-data-item">
-              <dt>Local stock</dt>
-              <dd>{entry.procurement.localStock}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Wholesaler stock</dt>
-              <dd>
-                {entry.procurement.wholesalerStock}
-                {entry.procurement.wholesalerName ? ` / ${entry.procurement.wholesalerName}` : ""}
-              </dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Requires Kingston order</dt>
-              <dd>{entry.procurement.requiresKingstonOrder ? "Yes" : "No"}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Requested to Kingston</dt>
-              <dd>{entry.procurement.kingstonRequestedAt ? formatDateTime(entry.procurement.kingstonRequestedAt) : "Not requested yet"}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Received from USA</dt>
-              <dd>{entry.procurement.receivedFromUsaAt ? formatDateTime(entry.procurement.receivedFromUsaAt) : "Awaiting arrival"}</dd>
-            </div>
-            <div className="workspace-data-item">
-              <dt>Warehouse movement</dt>
-              <dd>{entry.procurement.movedToRmaWarehouse ? "Moved to RMA warehouse" : "Pending warehouse move"}</dd>
-            </div>
-          </dl>
-        </SectionPanel>
-      </div>
-
-      <div className="workspace-grid-2">
-        <SectionPanel title="Active tasks" description="The work queue attached to this case, with owner and due date.">
-          <TaskList tasks={taskItems} emptyLabel="There are no active tasks attached to this case." />
-        </SectionPanel>
-
-        <SectionPanel title="Next valid transitions" description="Operational guardrails already expressed as transition rules for this case.">
-          <div className="space-y-4">
-            {nextTransitions.length > 0 ? (
-              nextTransitions.map((rule) => (
-                <article key={`${rule.from}-${rule.to}`} className="rounded-[1.25rem] border border-white/10 bg-white/4 px-4 py-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="workspace-chip workspace-chip-active">{rule.from}</span>
-                    <span className="text-sm text-white/56">to</span>
-                    <span className="workspace-chip">{rule.to}</span>
-                  </div>
-                  <p className="mt-4 text-sm leading-7 text-white/68">{rule.note}</p>
-                  <div className="mt-4 text-xs uppercase tracking-[0.16em] text-white/40">Required fields</div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {rule.requiredFields.map((field) => (
-                      <span key={field} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs uppercase tracking-[0.14em] text-white/58">
-                        {field}
-                      </span>
-                    ))}
-                  </div>
-                </article>
-              ))
-            ) : (
-              <div className="rounded-[1.35rem] border border-dashed border-white/12 bg-white/3 px-5 py-6 text-sm text-white/50">
-                This case is already at a terminal state or does not have an additional rule seeded yet.
+      {tab === "producto" ? (
+        <div className="workspace-grid-2">
+          <SectionPanel title="Producto y falla" description="Detalle tecnico para validar reemplazo, catalogacion y seguimiento.">
+            <dl className="workspace-data-list">
+              <div className="workspace-data-item">
+                <dt>SKU</dt>
+                <dd>{entry.sku}</dd>
               </div>
-            )}
-          </div>
-        </SectionPanel>
-      </div>
+              <div className="workspace-data-item">
+                <dt>Descripcion</dt>
+                <dd>{entry.productDescription}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Cantidad</dt>
+                <dd>{entry.quantity}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Falla informada</dt>
+                <dd>{entry.failureDescription}</dd>
+              </div>
+            </dl>
+          </SectionPanel>
 
-      <div className="workspace-grid-2">
-        <SectionPanel title="Attachments" description="Documents, guides, forms or proof already loaded into the case trail.">
-          <div className="space-y-3">
-            {entry.attachments.map((attachment) => (
-              <article key={attachment.id} className="rounded-[1.2rem] border border-white/10 bg-white/4 px-4 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
+          <SectionPanel title="Abastecimiento" description="Disponibilidad local, mayorista y dependencia con Kingston.">
+            <dl className="workspace-data-list">
+              <div className="workspace-data-item">
+                <dt>Stock local</dt>
+                <dd>{getAvailabilityLabel(entry.procurement.localStock)}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Stock mayorista</dt>
+                <dd>
+                  {getAvailabilityLabel(entry.procurement.wholesalerStock)}
+                  {entry.procurement.wholesalerName ? ` / ${entry.procurement.wholesalerName}` : ""}
+                </dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Pedido a Kingston</dt>
+                <dd>{entry.procurement.requiresKingstonOrder ? "Si" : "No"}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Solicitud enviada</dt>
+                <dd>{entry.procurement.kingstonRequestedAt ? formatDateTime(entry.procurement.kingstonRequestedAt) : "Sin enviar"}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Arribo desde USA</dt>
+                <dd>{entry.procurement.receivedFromUsaAt ? formatDateTime(entry.procurement.receivedFromUsaAt) : "Pendiente"}</dd>
+              </div>
+            </dl>
+          </SectionPanel>
+        </div>
+      ) : null}
+
+      {tab === "operacion" ? (
+        <div className="workspace-grid-2">
+        <SectionPanel title="Logistica" description="Ultima milla del caso: retiro, envio, guia y seguimiento.">
+            <dl className="workspace-data-list">
+              <div className="workspace-data-item">
+                <dt>Modalidad</dt>
+                <dd>{getDeliveryModeLabel(entry.logistics.mode)}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Direccion de entrega</dt>
+                <dd>{entry.logistics.address}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Transportista</dt>
+                <dd>{entry.logistics.transporter ?? "Pendiente"}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Numero de guia</dt>
+                <dd>{entry.logistics.guideNumber ?? "Sin cargar"}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Despacho y entrega</dt>
+                <dd>
+                  {(entry.logistics.dispatchDate && formatDateTime(entry.logistics.dispatchDate)) ?? "Sin despacho"} /{" "}
+                  {(entry.logistics.deliveredDate && formatDateTime(entry.logistics.deliveredDate)) ?? "Sin entrega"}
+                </dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Reintegro</dt>
+                <dd>{getReimbursementStateLabel(entry.logistics.reimbursementState)}</dd>
+              </div>
+            </dl>
+          </SectionPanel>
+
+          <SectionPanel title="Tareas del caso" description="Trabajo abierto asociado al caso actual.">
+            <TaskList tasks={taskItems} emptyLabel="No hay tareas abiertas para este caso." />
+          </SectionPanel>
+        </div>
+      ) : null}
+
+      {tab === "historial" ? (
+        <>
+          <div className="workspace-grid-2">
+            <SectionPanel title="Adjuntos" description="Documentos y evidencias cargadas sobre el caso.">
+              <div className="space-y-3">
+                {entry.attachments.map((attachment) => (
+                  <article key={attachment.id} className="rounded-[1rem] border border-white/10 bg-white/4 px-4 py-4">
                     <div className="text-sm font-semibold text-white">{attachment.name}</div>
-                    <div className="mt-1 text-sm text-white/56">
-                      {attachment.kind} / {attachment.sizeLabel}
+                    <div className="mt-1 text-sm text-white/58">
+                      {getAttachmentKindLabel(attachment.kind)} / {attachment.sizeLabel}
                     </div>
-                  </div>
-                  <div className="text-xs uppercase tracking-[0.16em] text-white/40">
-                    {attachment.uploadedBy} / {formatDateTime(attachment.createdAt)}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </SectionPanel>
+                    <div className="mt-2 text-xs uppercase tracking-[0.16em] text-white/40">
+                      {attachment.uploadedBy} / {formatDateTime(attachment.createdAt)}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </SectionPanel>
 
-        <SectionPanel title="Comments" description="Internal notes that travel with the case and keep the reasoning visible.">
-          <div className="space-y-3">
-            {entry.comments.map((comment) => (
-              <article key={comment.id} className="rounded-[1.2rem] border border-white/10 bg-white/4 px-4 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-white">{comment.author}</div>
-                  <div className="text-xs uppercase tracking-[0.16em] text-white/40">
-                    {comment.internal ? "Internal" : "External"} / {formatDateTime(comment.createdAt)}
-                  </div>
-                </div>
-                <p className="mt-3 text-sm leading-7 text-white/70">{comment.body}</p>
-              </article>
-            ))}
+            <SectionPanel title="Comentarios" description="Notas internas y seguimiento operativo.">
+              <div className="space-y-3">
+                {entry.comments.map((comment) => (
+                  <article key={comment.id} className="rounded-[1rem] border border-white/10 bg-white/4 px-4 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-white">{comment.author}</div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+                        {comment.internal ? "Interno" : "Externo"} / {formatDateTime(comment.createdAt)}
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm leading-7 text-white/68">{comment.body}</p>
+                  </article>
+                ))}
+              </div>
+            </SectionPanel>
           </div>
-        </SectionPanel>
-      </div>
 
-      <SectionPanel title="Workflow history" description="Immutable trail of state, logistics and communication events for the full case story.">
-        <EventTimeline events={entry.events} />
-      </SectionPanel>
+          <SectionPanel title="Historial del caso" description="Registro cronologico de cambios, tareas y eventos operativos.">
+            <EventTimeline events={entry.events} />
+          </SectionPanel>
+        </>
+      ) : null}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { kingstonCases, ownerDirectory, referenceNow, workflowStates } from "@/lib/kingston/data";
-import type { DeliveryMode, ExternalStatus, KingstonCase } from "@/lib/kingston/types";
+import type { DeliveryMode, EventKind, ExternalStatus, KingstonCase } from "@/lib/kingston/types";
 
 const numberFormatter = new Intl.NumberFormat("es-AR");
 
@@ -38,6 +38,147 @@ export function getOwnerInitials(name: string) {
 
 export function getOwnerTeam(name: string) {
   return ownerDirectory.find((entry) => entry.name === name)?.team ?? "Operations";
+}
+
+export function getTeamLabel(team: string) {
+  switch (team) {
+    case "Operations":
+      return "Operaciones";
+    case "Logistics":
+      return "Logistica";
+    case "Purchasing":
+      return "Compras";
+    case "Warehouse":
+      return "Deposito";
+    case "Management":
+      return "Gerencia";
+    default:
+      return team;
+  }
+}
+
+export function getDeliveryModeLabel(mode: DeliveryMode) {
+  return mode === "Dispatch" ? "Envio" : "Retiro";
+}
+
+export function getPriorityLabel(priority: string) {
+  switch (priority) {
+    case "Low":
+      return "Baja";
+    case "Medium":
+      return "Media";
+    case "High":
+      return "Alta";
+    case "Critical":
+      return "Critica";
+    default:
+      return priority;
+  }
+}
+
+export function getTaskStateLabel(state: string) {
+  switch (state) {
+    case "Pending":
+      return "Pendiente";
+    case "In progress":
+      return "En curso";
+    case "Completed":
+      return "Completada";
+    case "Blocked":
+      return "Bloqueada";
+    default:
+      return state;
+  }
+}
+
+export function getAvailabilityLabel(value: string) {
+  switch (value) {
+    case "Available":
+      return "Disponible";
+    case "Unavailable":
+      return "Sin stock";
+    case "Pending":
+      return "Pendiente";
+    default:
+      return value;
+  }
+}
+
+export function getReimbursementStateLabel(value: string) {
+  switch (value) {
+    case "Pending":
+      return "Pendiente";
+    case "Not applicable":
+      return "No aplica";
+    case "Requested":
+      return "Solicitado";
+    case "Completed":
+      return "Completado";
+    default:
+      return value;
+  }
+}
+
+export function getAttachmentKindLabel(kind: string) {
+  switch (kind) {
+    case "mail":
+      return "Correo";
+    case "photo":
+      return "Foto";
+    case "proof":
+      return "Comprobante";
+    case "guide":
+      return "Guia";
+    case "form":
+      return "Formulario";
+    default:
+      return kind;
+  }
+}
+
+export function getEventKindLabel(kind: EventKind) {
+  switch (kind) {
+    case "status-change":
+      return "Cambio de estado";
+    case "task":
+      return "Tarea";
+    case "logistics":
+      return "Logistica";
+    case "procurement":
+      return "Abastecimiento";
+    case "comment":
+      return "Comentario";
+    case "attachment":
+      return "Adjunto";
+    default:
+      return kind;
+  }
+}
+
+export function getWorkflowCategoryLabel(value: string) {
+  switch (value) {
+    case "active":
+      return "Activo";
+    case "delivery":
+      return "Entrega";
+    case "terminal":
+      return "Terminal";
+    default:
+      return value;
+  }
+}
+
+export function getOriginLabel(value: string) {
+  switch (value) {
+    case "Kingston email":
+      return "Correo de Kingston";
+    case "Operations load":
+      return "Carga de operaciones";
+    case "Commercial handoff":
+      return "Pase comercial";
+    default:
+      return value;
+  }
 }
 
 export function getCaseById(caseId: string) {

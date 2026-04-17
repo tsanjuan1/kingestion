@@ -1,19 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #081311;
-  --bg-soft: #0d1b18;
-  --panel: rgba(13, 25, 22, 0.88);
-  --panel-strong: rgba(9, 18, 16, 0.96);
-  --line: rgba(237, 233, 223, 0.08);
-  --line-strong: rgba(237, 233, 223, 0.16);
-  --text: #f5f0e7;
-  --muted: rgba(245, 240, 231, 0.62);
-  --brand: #8de7dc;
-  --brand-strong: #5abab1;
-  --success: #7bd691;
-  --warning: #ffc15a;
-  --danger: #ff7868;
+  --bg: #0f172a;
+  --bg-soft: #111c32;
+  --panel: #172338;
+  --panel-soft: #1d2b44;
+  --line: rgba(148, 163, 184, 0.18);
+  --line-strong: rgba(148, 163, 184, 0.28);
+  --text: #f8fafc;
+  --muted: rgba(226, 232, 240, 0.68);
+  --brand: #38bdf8;
+  --brand-soft: rgba(56, 189, 248, 0.12);
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --danger: #fb7185;
 }
 
 * {
@@ -27,10 +27,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(90, 186, 173, 0.16), transparent 24%),
-    radial-gradient(circle at top right, rgba(255, 193, 90, 0.08), transparent 20%),
-    linear-gradient(180deg, #0b1513 0%, var(--bg) 48%, #091210 100%);
+  background: linear-gradient(180deg, #0b1220 0%, #0f172a 100%);
   color: var(--text);
   font-family: var(--font-body), sans-serif;
 }
@@ -48,13 +45,13 @@ textarea {
 }
 
 ::selection {
-  background: rgba(141, 231, 220, 0.22);
+  background: rgba(56, 189, 248, 0.24);
 }
 
 .workspace-shell {
   display: grid;
   min-height: 100vh;
-  grid-template-columns: 290px minmax(0, 1fr);
+  grid-template-columns: 272px minmax(0, 1fr);
 }
 
 .workspace-sidebar {
@@ -64,12 +61,66 @@ textarea {
   min-height: 100vh;
   flex-direction: column;
   justify-content: space-between;
+  gap: 2rem;
   border-right: 1px solid var(--line);
-  padding: 2rem 1.25rem 1.5rem;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.01), transparent 24%),
-    rgba(7, 15, 13, 0.82);
-  backdrop-filter: blur(22px);
+  background: #0b1220;
+  padding: 1.5rem 1.15rem;
+}
+
+.workspace-brand {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.45rem;
+  letter-spacing: -0.05em;
+  text-transform: uppercase;
+  color: white;
+}
+
+.workspace-nav-group-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.45);
+}
+
+.workspace-nav-link {
+  display: grid;
+  gap: 0.2rem;
+  border-radius: 1rem;
+  border: 1px solid transparent;
+  padding: 0.85rem 0.95rem;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.workspace-nav-link:hover {
+  border-color: var(--line);
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.workspace-nav-link-active {
+  border-color: rgba(56, 189, 248, 0.26);
+  background: rgba(56, 189, 248, 0.14);
+}
+
+.workspace-nav-link-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: white;
+}
+
+.workspace-nav-link-hint {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.58);
+}
+
+.workspace-sidebar-summary {
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  background: var(--panel);
+  padding: 1rem;
 }
 
 .workspace-main {
@@ -80,39 +131,83 @@ textarea {
   position: sticky;
   top: 0;
   z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) auto;
+  align-items: end;
   gap: 1rem;
-  padding: 1.2rem 1.5rem;
   border-bottom: 1px solid var(--line);
-  background: rgba(8, 19, 17, 0.78);
-  backdrop-filter: blur(22px);
+  background: rgba(15, 23, 42, 0.94);
+  padding: 1rem 1.35rem;
+  backdrop-filter: blur(14px);
 }
 
-.workspace-search {
+.workspace-topbar-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.44);
+}
+
+.workspace-search-form {
+  min-width: 0;
+}
+
+.workspace-search-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.45rem;
+}
+
+.workspace-search-input {
   min-width: 0;
   flex: 1;
-  max-width: 32rem;
+  min-height: 2.9rem;
+  border-radius: 0.95rem;
   border: 1px solid var(--line);
-  border-radius: 1.1rem;
-  padding: 0.85rem 1rem;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--panel);
+  padding: 0 0.95rem;
+  color: white;
+}
+
+.workspace-search-input:focus {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.34);
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.08);
+}
+
+.workspace-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.workspace-user-badge {
+  display: flex;
+  height: 2.8rem;
+  width: 2.8rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .workspace-content {
-  padding: 1.6rem;
+  padding: 1.35rem;
 }
 
 .workspace-page {
   display: grid;
-  gap: 1.2rem;
+  gap: 1rem;
 }
 
 .workspace-page-header {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.9rem;
 }
 
 .workspace-page-header-row {
@@ -120,43 +215,37 @@ textarea {
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.9rem;
 }
 
 .workspace-panel {
   border: 1px solid var(--line);
-  border-radius: 1.6rem;
-  padding: 1.25rem;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 22%),
-    var(--panel);
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.24);
-}
-
-.workspace-panel-strong {
-  background: var(--panel-strong);
+  border-radius: 1.2rem;
+  background: var(--panel);
+  padding: 1.15rem;
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.22);
 }
 
 .workspace-kicker {
-  font-size: 0.73rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.24em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(245, 240, 231, 0.45);
+  color: rgba(226, 232, 240, 0.44);
 }
 
 .workspace-title {
   font-family: var(--font-display), sans-serif;
-  font-size: clamp(2.4rem, 5vw, 4.3rem);
-  line-height: 0.94;
+  font-size: clamp(2rem, 4vw, 3.1rem);
+  line-height: 0.98;
   letter-spacing: -0.06em;
   color: white;
 }
 
 .workspace-subtitle {
-  max-width: 46rem;
-  font-size: 1rem;
-  line-height: 1.95;
+  max-width: 52rem;
+  font-size: 0.98rem;
+  line-height: 1.8;
   color: var(--muted);
 }
 
@@ -164,31 +253,28 @@ textarea {
 .workspace-button-secondary {
   display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
-  border-radius: 999px;
-  min-height: 3rem;
-  padding: 0 1.15rem;
-  font-size: 0.84rem;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 2.9rem;
+  border-radius: 0.95rem;
+  padding: 0 1rem;
+  font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  transition:
-    transform 160ms ease,
-    background-color 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease;
+  transition: transform 140ms ease, border-color 140ms ease, background-color 140ms ease;
 }
 
 .workspace-button {
-  border: 1px solid rgba(123, 214, 145, 0.26);
-  background: linear-gradient(135deg, rgba(123, 214, 145, 0.18), rgba(90, 186, 173, 0.16));
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.16);
   color: white;
 }
 
 .workspace-button-secondary {
-  border: 1px solid var(--line-strong);
-  background: rgba(255, 255, 255, 0.03);
-  color: rgba(245, 240, 231, 0.84);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: rgba(226, 232, 240, 0.82);
 }
 
 .workspace-button:hover,
@@ -199,7 +285,7 @@ textarea {
 .workspace-chip-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: 0.6rem;
 }
 
 .workspace-chip {
@@ -208,18 +294,42 @@ textarea {
   gap: 0.4rem;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
-  padding: 0.5rem 0.9rem;
-  font-size: 0.74rem;
+  background: rgba(148, 163, 184, 0.08);
+  padding: 0.48rem 0.82rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(245, 240, 231, 0.7);
+  color: rgba(226, 232, 240, 0.78);
 }
 
 .workspace-chip-active {
-  border-color: rgba(141, 231, 220, 0.28);
-  background: rgba(141, 231, 220, 0.12);
+  border-color: rgba(56, 189, 248, 0.26);
+  background: rgba(56, 189, 248, 0.14);
+}
+
+.workspace-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.workspace-subnav-link {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  padding: 0 0.95rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.82);
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.workspace-subnav-link-active {
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.14);
   color: white;
 }
 
@@ -251,19 +361,19 @@ textarea {
 }
 
 .workspace-table th {
-  padding: 0 0 1rem;
+  padding: 0 0 0.85rem;
   text-align: left;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(245, 240, 231, 0.4);
+  color: rgba(226, 232, 240, 0.45);
 }
 
 .workspace-table td {
   vertical-align: top;
   border-top: 1px solid var(--line);
-  padding: 1rem 0.45rem 1rem 0;
+  padding: 1rem 0.55rem 1rem 0;
 }
 
 .workspace-table td:last-child,
@@ -277,39 +387,43 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.workspace-inline-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
 .workspace-label {
   display: block;
 }
 
 .workspace-label span {
   display: block;
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.45rem;
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(245, 240, 231, 0.44);
+  color: rgba(226, 232, 240, 0.46);
 }
 
 .workspace-input,
 .workspace-select,
 .workspace-textarea {
   width: 100%;
+  border-radius: 0.95rem;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: #0f172a;
   color: white;
-  padding: 0.9rem 1rem;
+  padding: 0.85rem 0.95rem;
 }
 
 .workspace-input,
 .workspace-select {
-  min-height: 3.25rem;
-  border-radius: 1rem;
+  min-height: 3rem;
 }
 
 .workspace-textarea {
-  min-height: 9rem;
-  border-radius: 1.15rem;
+  min-height: 8rem;
   resize: vertical;
 }
 
@@ -317,20 +431,20 @@ textarea {
 .workspace-select:focus,
 .workspace-textarea:focus {
   outline: none;
-  border-color: rgba(141, 231, 220, 0.32);
-  box-shadow: 0 0 0 4px rgba(141, 231, 220, 0.08);
+  border-color: rgba(56, 189, 248, 0.34);
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.08);
 }
 
 .workspace-data-list {
   display: grid;
-  gap: 1rem;
+  gap: 0.9rem;
 }
 
 .workspace-data-item {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.32rem;
   border-bottom: 1px solid var(--line);
-  padding-bottom: 0.85rem;
+  padding-bottom: 0.8rem;
 }
 
 .workspace-data-item:last-child {
@@ -339,16 +453,24 @@ textarea {
 }
 
 .workspace-data-item dt {
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(245, 240, 231, 0.4);
+  color: rgba(226, 232, 240, 0.42);
 }
 
 .workspace-data-item dd {
   margin: 0;
-  color: rgba(245, 240, 231, 0.82);
+  color: rgba(248, 250, 252, 0.92);
+  line-height: 1.65;
+}
+
+.workspace-empty {
+  border: 1px dashed var(--line-strong);
+  border-radius: 1rem;
+  padding: 1rem;
+  color: rgba(226, 232, 240, 0.62);
 }
 
 @media (max-width: 1180px) {
@@ -359,9 +481,12 @@ textarea {
   .workspace-sidebar {
     position: static;
     min-height: auto;
-    gap: 1.5rem;
     border-right: 0;
     border-bottom: 1px solid var(--line);
+  }
+
+  .workspace-topbar {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -379,6 +504,10 @@ textarea {
     padding-left: 1rem;
     padding-right: 1rem;
   }
+
+  .workspace-search-row {
+    flex-direction: column;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -387,7 +516,8 @@ textarea {
   }
 
   .workspace-button,
-  .workspace-button-secondary {
+  .workspace-button-secondary,
+  .workspace-nav-link {
     transition: none;
   }
 }

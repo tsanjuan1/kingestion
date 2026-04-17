@@ -15,15 +15,15 @@ type StatusPillProps =
 function getToneClasses(tone: "neutral" | "accent" | "danger" | "warning" | "success") {
   switch (tone) {
     case "accent":
-      return "border-[rgba(90,186,173,0.28)] bg-[rgba(90,186,173,0.12)] text-[#b7fbf2]";
+      return "border-[rgba(56,189,248,0.28)] bg-[rgba(56,189,248,0.14)] text-[#bae6fd]";
     case "danger":
-      return "border-[rgba(255,120,104,0.28)] bg-[rgba(255,120,104,0.12)] text-[#ffcdc6]";
+      return "border-[rgba(251,113,133,0.28)] bg-[rgba(251,113,133,0.14)] text-[#fecdd3]";
     case "warning":
-      return "border-[rgba(255,193,90,0.28)] bg-[rgba(255,193,90,0.12)] text-[#ffe0ad]";
+      return "border-[rgba(251,191,36,0.28)] bg-[rgba(251,191,36,0.14)] text-[#fde68a]";
     case "success":
-      return "border-[rgba(123,214,145,0.28)] bg-[rgba(123,214,145,0.12)] text-[#d6ffe0]";
+      return "border-[rgba(74,222,128,0.28)] bg-[rgba(74,222,128,0.14)] text-[#bbf7d0]";
     default:
-      return "border-[rgba(237,233,223,0.14)] bg-[rgba(255,255,255,0.06)] text-[#ede9df]";
+      return "border-white/12 bg-white/6 text-white";
   }
 }
 
@@ -33,7 +33,7 @@ export function StatusPill(props: StatusPillProps) {
 
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.18em] ${getToneClasses(
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.14em] ${getToneClasses(
         tone
       )}`}
     >

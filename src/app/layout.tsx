@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     default: "Kingestion",
     template: "%s | Kingestion"
   },
-  description: "Internal Kingston RMA control desk for case management, workflow tracking and SLA visibility."
+  description: "Gestion interna de casos Kingston para ANYX, con seguimiento operativo, tareas, historial y reportes."
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
