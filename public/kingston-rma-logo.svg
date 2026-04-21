@@ -1,0 +1,56 @@
+<svg width="100%" viewBox="0 0 680 260" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>Logo RMA Kingston - Portal de gestion interna</title>
+  <desc>Logo con icono geometrico y texto para el sistema de gestion de RMA Kingston</desc>
+
+  <rect x="68" y="82" width="68" height="68" rx="10" fill="#B5D4F4" opacity="0.5" />
+  <rect x="60" y="74" width="68" height="68" rx="10" fill="#378ADD" opacity="0.6" />
+  <rect x="52" y="66" width="68" height="68" rx="10" fill="#185FA5" />
+
+  <line x1="67" y1="88" x2="103" y2="88" stroke="white" stroke-width="3" stroke-linecap="round" />
+  <line x1="103" y1="88" x2="103" y2="108" stroke="white" stroke-width="3" stroke-linecap="round" />
+  <line x1="103" y1="108" x2="67" y2="108" stroke="white" stroke-width="3" stroke-linecap="round" />
+  <polyline
+    points="74,100 66,108 74,116"
+    fill="none"
+    stroke="white"
+    stroke-width="3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <text
+    x="148"
+    y="118"
+    fill="#0C447C"
+    style="font-family: Sora, sans-serif; font-size: 44px; font-weight: 700;"
+  >
+    Kingston
+  </text>
+
+  <line x1="148" y1="132" x2="418" y2="132" stroke="#B5D4F4" stroke-width="0.75" />
+
+  <text
+    x="148"
+    y="152"
+    fill="#185FA5"
+    style="font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500;"
+  >
+    RMA
+  </text>
+  <text
+    x="192"
+    y="152"
+    fill="#D3D1C7"
+    style="font-family: monospace; font-size: 13px; font-weight: 400;"
+  >
+    ·
+  </text>
+  <text
+    x="205"
+    y="152"
+    fill="#888780"
+    style="font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500;"
+  >
+    GESTION DE CASOS
+  </text>
+</svg>

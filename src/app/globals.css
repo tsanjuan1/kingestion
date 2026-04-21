@@ -126,11 +126,36 @@ textarea {
 .workspace-brand {
   display: inline-flex;
   align-items: center;
-  font-family: var(--font-display), sans-serif;
-  font-size: 1.45rem;
-  letter-spacing: -0.05em;
-  text-transform: uppercase;
+  justify-content: flex-start;
+  max-width: 100%;
   color: var(--text);
+}
+
+.workspace-brand-collapsed {
+  justify-content: center;
+}
+
+.workspace-brand-logo {
+  display: block;
+  width: 100%;
+  max-width: 11.5rem;
+  height: auto;
+}
+
+.workspace-brand-mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.9rem;
+  width: 2.9rem;
+  border-radius: 0.95rem;
+  background: linear-gradient(180deg, rgba(24, 95, 165, 0.16), rgba(55, 138, 221, 0.22));
+  border: 1px solid rgba(55, 138, 221, 0.24);
+  font-family: var(--font-display), sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: #185fa5;
 }
 
 .workspace-nav-group-title {

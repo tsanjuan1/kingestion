@@ -87,8 +87,19 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         <div className="space-y-6">
           <div className="workspace-sidebar-header">
             <div className="space-y-3">
-              <Link href="/dashboard" className="workspace-brand">
-                {isSidebarCollapsed ? "KG" : "kingestion"}
+              <Link
+                href="/dashboard"
+                className={`workspace-brand ${isSidebarCollapsed ? "workspace-brand-collapsed" : ""}`}
+              >
+                {isSidebarCollapsed ? (
+                  <span className="workspace-brand-mini">KG</span>
+                ) : (
+                  <img
+                    src="/kingston-rma-logo.svg"
+                    alt="Kingston RMA"
+                    className="workspace-brand-logo"
+                  />
+                )}
               </Link>
               {!isSidebarCollapsed ? (
                 <p className="text-sm leading-6 text-white/55">
