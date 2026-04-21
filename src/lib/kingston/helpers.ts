@@ -17,6 +17,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat("es-AR", {
 });
 
 export const CLOSED_CASE_STATUSES: ExternalStatus[] = ["Realizado", "Cerrado"];
+export const REIMBURSEMENT_TRIGGER_STATUS: ExternalStatus = "Producto recepcionado y en preparacion";
 
 function fallbackInitials(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -268,6 +269,10 @@ export function getWorkflowState(status: ExternalStatus) {
   return workflowStates.find((entry) => entry.status === status);
 }
 
+export function getWorkflowOrder(status: ExternalStatus) {
+  return getWorkflowState(status)?.order ?? 0;
+}
+
 export function getInitialSubstatus(status: ExternalStatus) {
   return getWorkflowState(status)?.substatuses[0] ?? status;
 }
@@ -283,6 +288,26 @@ export function getNextActionCopy(status: ExternalStatus) {
 export function getWorkflowSteps(options?: { includeTerminal?: boolean }) {
   return workflowStates.filter(
     (entry) => (options?.includeTerminal ?? true) || entry.category !== "terminal"
+  );
+}
+
+export function isReimbursementZone(zone: KingstonCase["zone"]) {
+  return zone === "Interior / Gran Buenos Aires";
+}
+
+export function hasReachedReimbursementTrigger(status: ExternalStatus) {
+  return getWorkflowOrder(status) >= getWorkflowOrder(REIMBURSEMENT_TRIGGER_STATUS);
+}
+
+export function shouldTrackReimbursement(entry: KingstonCase) {
+  return (
+    isReimbursementZone(entry.zone) &&
+    (
+      hasReachedReimbursementTrigger(entry.externalStatus) ||
+      entry.logistics.reimbursementState === "Pending" ||
+      entry.logistics.reimbursementState === "Requested" ||
+      entry.logistics.reimbursementState === "Completed"
+    )
   );
 }
 
@@ -303,14 +328,10 @@ export function getClosedCases(cases: KingstonCase[] = kingstonCases) {
 }
 
 export function getPendingReimbursements(cases: KingstonCase[] = kingstonCases) {
-  return getOpenCases(cases).filter(
+  return cases.filter(
     (entry) =>
-      entry.logistics.reimbursementState === "Pending" ||
-      entry.logistics.reimbursementState === "Requested" ||
-      (entry.zone === "Interior / Gran Buenos Aires" &&
-        entry.externalStatus === "Producto recepcionado y en preparacion" &&
-        entry.logistics.reimbursementState !== "Completed" &&
-        entry.logistics.reimbursementState !== "Not applicable")
+      shouldTrackReimbursement(entry) &&
+      entry.logistics.reimbursementState !== "Completed"
   );
 }
 

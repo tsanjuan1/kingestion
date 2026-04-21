@@ -12,8 +12,8 @@ import {
 } from "@/lib/kingston/helpers";
 
 export function ReimbursementsModule() {
-  const { openCases, canManageReimbursements, completeReimbursement, activeOwner } = useKingestion();
-  const pendingCases = getPendingReimbursements(openCases).toSorted(
+  const { cases, canManageReimbursements, completeReimbursement, activeOwner } = useKingestion();
+  const pendingCases = getPendingReimbursements(cases).toSorted(
     (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
   );
 
@@ -24,7 +24,7 @@ export function ReimbursementsModule() {
         description={
           canManageReimbursements
             ? "Podes revisar comprobantes y marcar el reintegro como completado."
-            : `Solo Compras o Gerencia pueden cerrar reintegros. Sesion actual: ${activeOwner?.name ?? "sin responsable activo"}.`
+            : `Solo Compras o Gerencia pueden cerrar reintegros. Mientras no se complete, el caso sigue apareciendo en este modulo. Sesion actual: ${activeOwner?.name ?? "sin responsable activo"}.`
         }
       >
         {pendingCases.length === 0 ? (

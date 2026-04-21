@@ -20,7 +20,12 @@ export const metadata: Metadata = {
     default: "Kingestion",
     template: "%s | Kingestion"
   },
-  description: "Gestion interna de casos Kingston para ANYX, con seguimiento operativo, tareas, historial y reportes."
+  description: "Gestion interna de casos Kingston para ANYX, con seguimiento operativo, tareas, historial y reportes.",
+  icons: {
+    icon: "/kingestion-mark.png",
+    shortcut: "/kingestion-mark.png",
+    apple: "/kingestion-mark.png"
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

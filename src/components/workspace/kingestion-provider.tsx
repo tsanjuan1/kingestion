@@ -7,10 +7,13 @@ import {
   buildCaseAddress,
   getClosedCases,
   getDashboardSnapshot,
+  hasReachedReimbursementTrigger,
   getInitialSubstatus,
   getNextActionCopy,
   getOpenCases,
-  getReportsSnapshot
+  getReportsSnapshot,
+  isReimbursementZone,
+  shouldTrackReimbursement
 } from "@/lib/kingston/helpers";
 import type {
   CaseAttachment,
@@ -478,23 +481,19 @@ function normalizeCase(entry: KingstonCase): KingstonCase {
     (attachment) => attachment.kind === "proof" || attachment.kind === "photo"
   );
   const isEligibleForReimbursementFlow =
-    entry.deliveryMode === "Dispatch" &&
-    entry.zone === "Interior / Gran Buenos Aires" &&
-    statusOrder >= 3;
+    isReimbursementZone(entry.zone) &&
+    (statusOrder >= 3 ||
+      entry.logistics.reimbursementState === "Pending" ||
+      entry.logistics.reimbursementState === "Requested" ||
+      entry.logistics.reimbursementState === "Completed");
   const normalizedReimbursementState =
-    entry.deliveryMode === "Pickup"
-      ? "Not applicable"
-      : entry.logistics.reimbursementState === "Completed"
-        ? "Completed"
-        : entry.logistics.reimbursementState === "Requested"
-          ? isEligibleForReimbursementFlow ? "Requested" : "Not applicable"
-          : entry.logistics.reimbursementState === "Pending"
-            ? isEligibleForReimbursementFlow ? "Pending" : "Not applicable"
-            : isEligibleForReimbursementFlow
-              ? hasProofAttachment
-                ? "Requested"
-                : "Pending"
-              : "Not applicable";
+    entry.logistics.reimbursementState === "Completed"
+      ? "Completed"
+      : isEligibleForReimbursementFlow
+        ? hasProofAttachment
+          ? "Requested"
+          : "Pending"
+        : "Not applicable";
 
   return {
     ...entry,
@@ -809,14 +808,12 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
           deliveredDate: isTerminalStatus ? nowIso : null,
           shippingCost: null,
           reimbursementState:
-            input.deliveryMode === "Pickup"
-              ? "Not applicable"
-              : input.zone === "Interior / Gran Buenos Aires" &&
-                  input.externalStatus === "Producto recepcionado y en preparacion"
-                ? nextAttachments.some((attachment) => attachment.kind === "proof" || attachment.kind === "photo")
-                  ? "Requested"
-                  : "Pending"
-                : "Not applicable"
+            isReimbursementZone(input.zone) &&
+            hasReachedReimbursementTrigger(input.externalStatus)
+              ? nextAttachments.some((attachment) => attachment.kind === "proof" || attachment.kind === "photo")
+                ? "Requested"
+                : "Pending"
+              : "Not applicable"
         },
         procurement: {
           localStock: input.externalStatus === "Pedido a Kingston" ? "Unavailable" : "Pending",
@@ -898,10 +895,12 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
           actor: actorName,
           createdAt: now
         };
+        const shouldTrackCurrentCase = shouldTrackReimbursement(entry);
         const reimbursementState: KingstonCase["logistics"]["reimbursementState"] =
-          (nextAttachment.kind === "proof" || nextAttachment.kind === "photo") &&
-          entry.logistics.reimbursementState === "Pending"
-            ? "Requested"
+          shouldTrackCurrentCase
+            ? (nextAttachment.kind === "proof" || nextAttachment.kind === "photo")
+              ? "Requested"
+              : entry.logistics.reimbursementState
             : entry.logistics.reimbursementState;
 
         return {
@@ -1325,15 +1324,20 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
           logistics: {
             ...entry.logistics,
             reimbursementState:
-              entry.zone === "Interior / Gran Buenos Aires" &&
-              status === "Producto recepcionado y en preparacion" &&
-              entry.logistics.reimbursementState !== "Completed"
-                ? entry.attachments.some(
-                    (attachment) => attachment.kind === "proof" || attachment.kind === "photo"
-                  )
-                  ? "Requested"
-                  : "Pending"
-                : entry.logistics.reimbursementState,
+              entry.logistics.reimbursementState === "Completed"
+                ? "Completed"
+                : isReimbursementZone(entry.zone) &&
+                    (
+                      hasReachedReimbursementTrigger(status) ||
+                      entry.logistics.reimbursementState === "Pending" ||
+                      entry.logistics.reimbursementState === "Requested"
+                    )
+                  ? entry.attachments.some(
+                      (attachment) => attachment.kind === "proof" || attachment.kind === "photo"
+                    )
+                    ? "Requested"
+                    : "Pending"
+                  : "Not applicable",
             deliveredDate:
               status === "Realizado" && !entry.logistics.deliveredDate ? now : entry.logistics.deliveredDate
           },

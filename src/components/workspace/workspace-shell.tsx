@@ -92,11 +92,15 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                 className={`workspace-brand ${isSidebarCollapsed ? "workspace-brand-collapsed" : ""}`}
               >
                 {isSidebarCollapsed ? (
-                  <span className="workspace-brand-mini">KG</span>
+                  <img
+                    src="/kingestion-mark.png"
+                    alt="Kingestion"
+                    className="workspace-brand-mini-logo"
+                  />
                 ) : (
                   <img
-                    src="/kingston-rma-logo.svg"
-                    alt="Kingston RMA"
+                    src="/kingestion-logo.png"
+                    alt="Kingestion"
                     className="workspace-brand-logo"
                   />
                 )}
