@@ -62,7 +62,9 @@ export function ReportsModule() {
       return {
         title: "Reporte de auditoria",
         filename: "kingestion-reporte-auditoria.pdf",
-        lines: auditLog.slice(0, 40).map((entry) => `${entry.actorName} | ${getAuditActionLabel(entry.action)} | ${entry.detail}`)
+        lines: auditLog
+          .slice(0, 40)
+          .map((entry) => `${entry.actorName} | ${getAuditActionLabel(entry.action)} | ${entry.detail}`)
       };
     }
 
@@ -87,27 +89,6 @@ export function ReportsModule() {
 
   return (
     <div className="workspace-page">
-      <header className="workspace-page-header">
-        <div className="workspace-page-header-row">
-          <div>
-            <p className="workspace-kicker">Reportes</p>
-            <h1 className="workspace-title">Consultas y exportes</h1>
-          </div>
-
-          <div className="workspace-chip-row">
-            <button className="workspace-button" type="button" onClick={handleDownload}>
-              Descargar PDF
-            </button>
-            <Link className="workspace-button-secondary" href="/cases">
-              Ir a casos
-            </Link>
-          </div>
-        </div>
-        <p className="workspace-subtitle">
-          Cada submodulo arma una lectura distinta de la operacion y se puede bajar directo en PDF.
-        </p>
-      </header>
-
       <ModuleSubnav
         items={[
           { href: "/reports?view=general", label: "General", active: view === "general" },
@@ -116,6 +97,16 @@ export function ReportsModule() {
           { href: "/reports?view=sku", label: "Por SKU", active: view === "sku" },
           { href: "/reports?view=auditoria", label: "Auditoria", active: view === "auditoria" }
         ]}
+        aside={
+          <div className="workspace-inline-actions">
+            <button className="workspace-button" type="button" onClick={handleDownload}>
+              Descargar PDF
+            </button>
+            <Link className="workspace-button-secondary" href="/cases">
+              Ver casos
+            </Link>
+          </div>
+        }
       />
 
       <section className="workspace-grid-4">
@@ -125,7 +116,7 @@ export function ReportsModule() {
       </section>
 
       {view === "general" ? (
-        <SectionPanel title="Resumen general" description="Estado consolidado para una lectura rapida de la operacion.">
+        <SectionPanel title="Resumen general" description="Lectura consolidada para entender carga y salida del flujo.">
           <div className="workspace-grid-2">
             {dashboardSnapshot.ownerLoad.map((entry) => (
               <article key={entry.owner} className="workspace-list-card">

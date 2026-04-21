@@ -87,6 +87,10 @@ textarea {
   grid-template-columns: 272px minmax(0, 1fr);
 }
 
+.workspace-shell-collapsed {
+  grid-template-columns: 94px minmax(0, 1fr);
+}
+
 .workspace-sidebar {
   position: sticky;
   top: 0;
@@ -99,6 +103,24 @@ textarea {
   background: var(--sidebar-bg);
   padding: 1.5rem 1.15rem;
   backdrop-filter: blur(18px);
+}
+
+.workspace-sidebar-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.workspace-sidebar-toggle {
+  flex: 0 0 auto;
+  height: 2.2rem;
+  width: 2.2rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
 }
 
 .workspace-brand {
@@ -129,6 +151,11 @@ textarea {
   transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 
+.workspace-nav-link-collapsed {
+  place-items: center;
+  padding: 0.85rem 0.35rem;
+}
+
 .workspace-nav-link:hover {
   border-color: rgba(125, 211, 252, 0.16);
   background: rgba(148, 163, 184, 0.08);
@@ -157,6 +184,25 @@ textarea {
   border-radius: 1.25rem;
   background: var(--panel);
   padding: 1rem;
+}
+
+.workspace-sidebar-footer {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.workspace-sidebar-controls {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.workspace-sidebar-session {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.workspace-sidebar-session-collapsed {
+  justify-items: center;
 }
 
 .workspace-main {
@@ -234,12 +280,37 @@ textarea {
 }
 
 .workspace-content {
-  padding: 1.35rem;
+  padding: 1.2rem 1.35rem;
 }
 
 .workspace-page {
   display: grid;
   gap: 1rem;
+}
+
+.workspace-panel-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1rem;
+}
+
+.workspace-panel-title {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.45rem;
+  letter-spacing: -0.04em;
+  color: var(--text);
+}
+
+.workspace-panel-description {
+  margin: 0.5rem 0 0;
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: var(--muted-faint);
 }
 
 .workspace-page-header {
@@ -359,6 +430,21 @@ textarea {
   gap: 0.6rem;
 }
 
+.workspace-subnav-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.workspace-subnav-aside {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
 .workspace-subnav-link {
   display: inline-flex;
   min-height: 2.5rem;
@@ -376,6 +462,64 @@ textarea {
   border-color: rgba(56, 189, 248, 0.3);
   background: rgba(56, 189, 248, 0.14);
   color: var(--text);
+}
+
+.workspace-stage-dropdown {
+  min-width: min(100%, 16rem);
+}
+
+.workspace-collapsible {
+  display: grid;
+  gap: 0;
+}
+
+.workspace-collapsible-toggle {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.workspace-collapsible-copy {
+  max-width: 52rem;
+}
+
+.workspace-collapsible-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.workspace-collapsible-indicator {
+  display: inline-flex;
+  min-height: 2.2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(148, 163, 184, 0.08);
+  padding: 0 0.9rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-strong);
+}
+
+.workspace-collapsible-body {
+  margin-top: 1rem;
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
 }
 
 .workspace-grid-4 {
@@ -873,6 +1017,14 @@ html[data-theme="light"] .workspace-shell .workspace-link-button-danger {
   .workspace-topbar-controls {
     justify-self: stretch;
     justify-content: space-between;
+  }
+
+  .workspace-subnav-row,
+  .workspace-collapsible-toggle,
+  .workspace-collapsible-actions,
+  .workspace-subnav-aside {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

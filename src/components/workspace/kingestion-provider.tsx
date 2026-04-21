@@ -58,6 +58,7 @@ type CreateCaseInput = {
   province: string;
   city: string;
   sku: string;
+  replacementSku?: string;
   quantity: number;
   productDescription: string;
   failureDescription: string;
@@ -65,12 +66,12 @@ type CreateCaseInput = {
   observations: string;
   origin: KingstonCase["origin"];
   banking?: Partial<ClientBankingDetails>;
-  attachmentNames?: string[];
+  attachments?: CaseAttachmentInput[];
 };
 
 type CaseAttachmentInput = {
   name: string;
-  kind: CaseAttachment["kind"];
+  kind?: CaseAttachment["kind"];
   sizeLabel: string;
   mimeType?: string;
   previewUrl?: string;
@@ -89,6 +90,8 @@ type KingestionContextValue = WorkspaceState & {
   setThemeMode: (themeMode: ThemeMode) => void;
   createCase: (input: CreateCaseInput) => string;
   addCaseAttachment: (caseId: string, input: CaseAttachmentInput) => boolean;
+  removeCaseAttachment: (caseId: string, attachmentId: string) => boolean;
+  updateReplacementSku: (caseId: string, replacementSku: string) => boolean;
   completeReimbursement: (caseId: string) => boolean;
   createOwner: (input: OwnerInput) => void;
   updateOwner: (ownerId: string, input: OwnerInput) => void;
@@ -470,11 +473,34 @@ function normalizeCase(entry: KingstonCase): KingstonCase {
   const baseAddress = clientDetails?.fullAddress ?? buildCaseAddress(entry);
   const logisticsAddress =
     entry.deliveryMode === "Pickup" ? entry.logistics.address : clientDetails?.fullAddress ?? entry.logistics.address;
+  const statusOrder = workflowStates.find((item) => item.status === normalizedStatus)?.order ?? 0;
+  const hasProofAttachment = entry.attachments.some(
+    (attachment) => attachment.kind === "proof" || attachment.kind === "photo"
+  );
+  const isEligibleForReimbursementFlow =
+    entry.deliveryMode === "Dispatch" &&
+    entry.zone === "Interior / Gran Buenos Aires" &&
+    statusOrder >= 3;
+  const normalizedReimbursementState =
+    entry.deliveryMode === "Pickup"
+      ? "Not applicable"
+      : entry.logistics.reimbursementState === "Completed"
+        ? "Completed"
+        : entry.logistics.reimbursementState === "Requested"
+          ? isEligibleForReimbursementFlow ? "Requested" : "Not applicable"
+          : entry.logistics.reimbursementState === "Pending"
+            ? isEligibleForReimbursementFlow ? "Pending" : "Not applicable"
+            : isEligibleForReimbursementFlow
+              ? hasProofAttachment
+                ? "Requested"
+                : "Pending"
+              : "Not applicable";
 
   return {
     ...entry,
     externalStatus: normalizedStatus,
     address: baseAddress,
+    replacementSku: entry.replacementSku ?? null,
     banking: entry.banking ?? clientDetails?.banking,
     nextAction: entry.nextAction || getNextActionCopy(normalizedStatus),
     internalSubstatus:
@@ -483,7 +509,8 @@ function normalizeCase(entry: KingstonCase): KingstonCase {
         : getInitialSubstatus(normalizedStatus),
     logistics: {
       ...entry.logistics,
-      address: logisticsAddress
+      address: logisticsAddress,
+      reimbursementState: normalizedReimbursementState
     }
   };
 }
@@ -677,7 +704,6 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
       ? getNextActionCopy(input.externalStatus)
       : trimmedNextAction || getNextActionCopy(input.externalStatus);
     const fullAddress = normalizedAddress || fallbackClientDetails?.fullAddress || "Direccion pendiente";
-    const attachmentNames = (input.attachmentNames ?? []).map((entry) => entry.trim()).filter(Boolean);
     const bankingValues = input.banking ?? {};
     const hasExplicitBanking = Object.values(bankingValues).some((value) => Boolean(value?.trim()));
     const banking =
@@ -733,13 +759,15 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
           ]
         : [];
 
-      const nextAttachments = attachmentNames.map((name) => ({
+      const nextAttachments = (input.attachments ?? []).map((attachment) => ({
         id: createId("attachment"),
-        name,
-        kind: inferAttachmentKind(name),
-        sizeLabel: "Adjunto inicial",
+        name: attachment.name.trim(),
+        kind: attachment.kind || inferAttachmentKind(attachment.name),
+        sizeLabel: attachment.sizeLabel,
         uploadedBy: actorName,
-        createdAt: nowIso
+        createdAt: nowIso,
+        mimeType: attachment.mimeType,
+        previewUrl: attachment.previewUrl
       }));
 
       const createdCase = normalizeCase({
@@ -764,6 +792,7 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
         province: normalizedProvince,
         city: normalizedCity,
         sku: normalizedSku,
+        replacementSku: input.replacementSku?.trim() || null,
         productDescription: normalizedProductDescription,
         quantity: input.quantity,
         failureDescription: normalizedFailureDescription,
@@ -779,7 +808,15 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
           dispatchDate: null,
           deliveredDate: isTerminalStatus ? nowIso : null,
           shippingCost: null,
-          reimbursementState: input.deliveryMode === "Pickup" ? "Not applicable" : "Pending"
+          reimbursementState:
+            input.deliveryMode === "Pickup"
+              ? "Not applicable"
+              : input.zone === "Interior / Gran Buenos Aires" &&
+                  input.externalStatus === "Producto recepcionado y en preparacion"
+                ? nextAttachments.some((attachment) => attachment.kind === "proof" || attachment.kind === "photo")
+                  ? "Requested"
+                  : "Pending"
+                : "Not applicable"
         },
         procurement: {
           localStock: input.externalStatus === "Pedido a Kingston" ? "Unavailable" : "Pending",
@@ -845,7 +882,7 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
         const nextAttachment: CaseAttachment = {
           id: createId("attachment"),
           name: input.name.trim(),
-          kind: input.kind,
+          kind: input.kind || inferAttachmentKind(input.name),
           sizeLabel: input.sizeLabel,
           uploadedBy: actorName,
           createdAt: now,
@@ -862,7 +899,8 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
           createdAt: now
         };
         const reimbursementState: KingstonCase["logistics"]["reimbursementState"] =
-          nextAttachment.kind === "proof" && entry.logistics.reimbursementState === "Pending"
+          (nextAttachment.kind === "proof" || nextAttachment.kind === "photo") &&
+          entry.logistics.reimbursementState === "Pending"
             ? "Requested"
             : entry.logistics.reimbursementState;
 
@@ -889,6 +927,125 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
           entityId: caseId,
           action: "case-attachment-added",
           detail: `${targetCase.internalNumber} recibio el adjunto ${input.name.trim()}.`
+        }
+      );
+    });
+
+    return true;
+  };
+
+  const removeCaseAttachment = (caseId: string, attachmentId: string) => {
+    const targetCase = state.cases.find((entry) => entry.id === caseId);
+    const targetAttachment = targetCase?.attachments.find((attachment) => attachment.id === attachmentId);
+    if (!targetCase || !targetAttachment) {
+      return false;
+    }
+
+    setState((currentState) => {
+      const actor = resolveActor(currentState);
+      const actorName = actor?.name ?? "Sesion sin responsable activo";
+      const now = new Date().toISOString();
+
+      const nextCases: KingstonCase[] = currentState.cases.map((entry): KingstonCase => {
+        if (entry.id !== caseId) {
+          return entry;
+        }
+
+        const remainingAttachments = entry.attachments.filter((attachment) => attachment.id !== attachmentId);
+        const hasProofAttachment = remainingAttachments.some(
+          (attachment) => attachment.kind === "proof" || attachment.kind === "photo"
+        );
+
+        const nextEvent: CaseEvent = {
+          id: createId("event"),
+          kind: "attachment",
+          title: "Adjunto eliminado",
+          detail: `${targetAttachment.name} se elimino del caso.`,
+          actor: actorName,
+          createdAt: now
+        };
+
+        return {
+          ...entry,
+          updatedAt: now,
+          attachments: remainingAttachments,
+          logistics: {
+            ...entry.logistics,
+            reimbursementState:
+              !hasProofAttachment && entry.logistics.reimbursementState === "Requested"
+                ? "Pending"
+                : entry.logistics.reimbursementState
+          },
+          events: [nextEvent, ...entry.events]
+        };
+      });
+
+      return appendAuditLog(
+        {
+          ...currentState,
+          cases: nextCases
+        },
+        actor,
+        {
+          entityType: "case",
+          entityId: caseId,
+          action: "case-attachment-removed",
+          detail: `${targetCase.internalNumber} elimino el adjunto ${targetAttachment.name}.`
+        }
+      );
+    });
+
+    return true;
+  };
+
+  const updateReplacementSku = (caseId: string, replacementSku: string) => {
+    const targetCase = state.cases.find((entry) => entry.id === caseId);
+    if (!targetCase) {
+      return false;
+    }
+
+    setState((currentState) => {
+      const actor = resolveActor(currentState);
+      const normalizedReplacementSku = replacementSku.trim() || null;
+      const now = new Date().toISOString();
+
+      const nextCases: KingstonCase[] = currentState.cases.map((entry): KingstonCase => {
+        if (entry.id !== caseId) {
+          return entry;
+        }
+
+        const nextEvent: CaseEvent = {
+          id: createId("event"),
+          kind: "procurement",
+          title: "SKU de reemplazo actualizado",
+          detail: normalizedReplacementSku
+            ? `Se definio ${normalizedReplacementSku} como SKU de reemplazo.`
+            : "Se limpio el SKU de reemplazo del caso.",
+          actor: actor?.name ?? "Sesion sin responsable activo",
+          createdAt: now
+        };
+
+        return {
+          ...entry,
+          replacementSku: normalizedReplacementSku,
+          updatedAt: now,
+          events: [nextEvent, ...entry.events]
+        };
+      });
+
+      return appendAuditLog(
+        {
+          ...currentState,
+          cases: nextCases
+        },
+        actor,
+        {
+          entityType: "case",
+          entityId: caseId,
+          action: "case-replacement-sku-updated",
+          detail: normalizedReplacementSku
+            ? `${targetCase.internalNumber} ahora usa ${normalizedReplacementSku} como SKU de reemplazo.`
+            : `Se removio el SKU de reemplazo de ${targetCase.internalNumber}.`
         }
       );
     });
@@ -1167,6 +1324,16 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
           updatedAt: now,
           logistics: {
             ...entry.logistics,
+            reimbursementState:
+              entry.zone === "Interior / Gran Buenos Aires" &&
+              status === "Producto recepcionado y en preparacion" &&
+              entry.logistics.reimbursementState !== "Completed"
+                ? entry.attachments.some(
+                    (attachment) => attachment.kind === "proof" || attachment.kind === "photo"
+                  )
+                  ? "Requested"
+                  : "Pending"
+                : entry.logistics.reimbursementState,
             deliveredDate:
               status === "Realizado" && !entry.logistics.deliveredDate ? now : entry.logistics.deliveredDate
           },
@@ -1235,6 +1402,8 @@ export function KingestionProvider({ children }: { children: React.ReactNode }) 
       setThemeMode,
       createCase,
       addCaseAttachment,
+      removeCaseAttachment,
+      updateReplacementSku,
       completeReimbursement,
       createOwner,
       updateOwner,

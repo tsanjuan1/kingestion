@@ -464,7 +464,7 @@ export const kingstonCases: KingstonCase[] = [
       dispatchDate: null,
       deliveredDate: null,
       shippingCost: null,
-      reimbursementState: "Pending"
+      reimbursementState: "Not applicable"
     },
     procurement: {
       localStock: "Pending",

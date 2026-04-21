@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import { ModuleSubnav } from "@/components/workspace/module-subnav";
@@ -46,18 +45,8 @@ function getView(value: string | null): SettingsView {
 export function SettingsModule() {
   const searchParams = useSearchParams();
   const view = getView(searchParams.get("view"));
-  const {
-    activeOwner,
-    activeOwners,
-    owners,
-    openCases,
-    auditLog,
-    setActiveOwner,
-    createOwner,
-    updateOwner,
-    deleteOwner,
-    assignCaseOwner
-  } = useKingestion();
+  const { owners, activeOwners, openCases, auditLog, createOwner, updateOwner, deleteOwner, assignCaseOwner } =
+    useKingestion();
   const [editingOwnerId, setEditingOwnerId] = useState<string | null>(null);
   const [formState, setFormState] = useState<OwnerFormState>(emptyOwnerForm);
 
@@ -99,24 +88,6 @@ export function SettingsModule() {
 
   return (
     <div className="workspace-page">
-      <header className="workspace-page-header">
-        <div className="workspace-page-header-row">
-          <div>
-            <p className="workspace-kicker">Configuracion</p>
-            <h1 className="workspace-title">Usuarios, responsables y control</h1>
-          </div>
-
-          <div className="workspace-chip-row">
-            <Link className="workspace-button-secondary" href="/cases">
-              Ir a casos
-            </Link>
-          </div>
-        </div>
-        <p className="workspace-subtitle">
-          Configuracion separada por submodulos para no mezclar directorio, asignaciones y auditoria en un unico panel.
-        </p>
-      </header>
-
       <ModuleSubnav
         items={[
           { href: "/settings?view=responsables", label: "Responsables", active: view === "responsables" },
@@ -128,29 +99,10 @@ export function SettingsModule() {
 
       {view === "responsables" ? (
         <div className="workspace-grid-2">
-          <SectionPanel title="Usuario activo" description="Selecciona quien esta operando para registrar autoria en cada accion.">
-            <div className="workspace-inline-form">
-              <label className="workspace-label">
-                <span>Sesion actual</span>
-                <select
-                  className="workspace-select"
-                  value={activeOwner?.id ?? activeOwners[0]?.id ?? ""}
-                  onChange={(event) => setActiveOwner(event.target.value)}
-                >
-                  {activeOwners.map((owner) => (
-                    <option key={owner.id} value={owner.id}>
-                      {owner.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="workspace-empty">
-                Los cambios de estado, asignacion y descarga de reportes quedan registrados con este usuario.
-              </div>
-            </div>
-          </SectionPanel>
-
-          <SectionPanel title={editingOwnerId ? "Editar responsable" : "Nuevo responsable"} description="Alta y mantenimiento del directorio operativo.">
+          <SectionPanel
+            title={editingOwnerId ? "Editar responsable" : "Nuevo responsable"}
+            description="Alta y mantenimiento del directorio operativo."
+          >
             <form className="workspace-inline-form" onSubmit={handleSubmit}>
               <label className="workspace-label">
                 <span>Nombre</span>
@@ -207,7 +159,7 @@ export function SettingsModule() {
                 </select>
               </label>
 
-              <div className="workspace-chip-row">
+              <div className="workspace-inline-actions">
                 <button className="workspace-button" type="submit">
                   {editingOwnerId ? "Guardar cambios" : "Crear responsable"}
                 </button>
@@ -220,7 +172,10 @@ export function SettingsModule() {
             </form>
           </SectionPanel>
 
-          <SectionPanel title="Directorio operativo" description="Responsables editables y eliminables, con su disponibilidad actual.">
+          <SectionPanel
+            title="Directorio operativo"
+            description="Responsables editables y eliminables, con su disponibilidad actual."
+          >
             <div className="workspace-table-wrap">
               <table className="workspace-table">
                 <thead>

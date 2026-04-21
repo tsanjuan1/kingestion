@@ -19,23 +19,11 @@ export function ReimbursementsModule() {
 
   return (
     <div className="workspace-page">
-      <header className="workspace-page-header">
-        <div className="workspace-page-header-row">
-          <div>
-            <p className="workspace-kicker">Reintegros</p>
-            <h1 className="workspace-title">Pendientes de reintegro</h1>
-          </div>
-        </div>
-        <p className="workspace-subtitle">
-          Casos abiertos con reintegro pendiente o solicitado. Siguen apareciendo en abiertos hasta cerrar la operacion.
-        </p>
-      </header>
-
       <SectionPanel
-        title="Casos a reintegrar"
+        title="Pendientes para cierre de reintegro"
         description={
           canManageReimbursements
-            ? "Podés revisar comprobantes y marcar el reintegro como completado."
+            ? "Podes revisar comprobantes y marcar el reintegro como completado."
             : `Solo Compras o Gerencia pueden cerrar reintegros. Sesion actual: ${activeOwner?.name ?? "sin responsable activo"}.`
         }
       >

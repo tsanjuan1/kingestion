@@ -19,31 +19,20 @@ export function CasesModule({ mode }: CasesModuleProps) {
 
   return (
     <div className="workspace-page">
-      <header className="workspace-page-header">
-        <div className="workspace-page-header-row">
-          <div>
-            <p className="workspace-kicker">Casos</p>
-            <h1 className="workspace-title">{isOpenView ? "Casos abiertos" : "Casos cerrados"}</h1>
-          </div>
-
-          <div className="workspace-chip-row">
-            {isOpenView ? (
-              <Link className="workspace-button" href="/cases/new">
-                Nuevo caso
-              </Link>
-            ) : null}
-          </div>
-        </div>
-        <p className="workspace-subtitle">
-          {isOpenView
-            ? `${cases.length} casos en la bandeja operativa activa.`
-            : `${cases.length} casos archivados por realizado o cerrado.`}
-        </p>
-      </header>
-
       <SectionPanel
-        title={isOpenView ? "Listado de abiertos" : "Listado de cerrados"}
-        description="Vista operativa simple con los datos clave del caso y cambio de estado directo."
+        title={isOpenView ? "Bandeja activa" : "Archivo de casos"}
+        description={
+          isOpenView
+            ? "Solo los casos abiertos con su informacion clave y cambio de estado directo."
+            : "Solo los casos realizados o cerrados."
+        }
+        aside={
+          isOpenView ? (
+            <Link className="workspace-button" href="/cases/new">
+              Nuevo caso
+            </Link>
+          ) : undefined
+        }
       >
         <CaseTable
           cases={cases}

@@ -122,11 +122,11 @@ export function getAvailabilityLabel(value: string) {
 export function getReimbursementStateLabel(value: string) {
   switch (value) {
     case "Pending":
-      return "Pendiente";
+      return "Pendiente de reintegro";
     case "Not applicable":
       return "No aplica";
     case "Requested":
-      return "Solicitado";
+      return "Comprobante cargado";
     case "Completed":
       return "Completado";
     default:
@@ -202,8 +202,12 @@ export function getAuditActionLabel(action: string) {
       return "Alta de caso";
     case "case-attachment-added":
       return "Adjunto cargado";
+    case "case-attachment-removed":
+      return "Adjunto eliminado";
     case "case-reimbursement-completed":
       return "Reintegro completado";
+    case "case-replacement-sku-updated":
+      return "SKU de reemplazo";
     case "owner-created":
       return "Alta de responsable";
     case "owner-updated":
@@ -301,7 +305,12 @@ export function getClosedCases(cases: KingstonCase[] = kingstonCases) {
 export function getPendingReimbursements(cases: KingstonCase[] = kingstonCases) {
   return getOpenCases(cases).filter(
     (entry) =>
-      entry.logistics.reimbursementState === "Pending" || entry.logistics.reimbursementState === "Requested"
+      entry.logistics.reimbursementState === "Pending" ||
+      entry.logistics.reimbursementState === "Requested" ||
+      (entry.zone === "Interior / Gran Buenos Aires" &&
+        entry.externalStatus === "Producto recepcionado y en preparacion" &&
+        entry.logistics.reimbursementState !== "Completed" &&
+        entry.logistics.reimbursementState !== "Not applicable")
   );
 }
 

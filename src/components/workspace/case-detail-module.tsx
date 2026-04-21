@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 
+import { CaseStatusSelect } from "@/components/workspace/case-status-select";
 import { EventTimeline } from "@/components/workspace/event-timeline";
 import { ModuleSubnav } from "@/components/workspace/module-subnav";
 import { SectionPanel } from "@/components/workspace/section-panel";
 import { StatusPill } from "@/components/workspace/status-pill";
 import { TaskList } from "@/components/workspace/task-list";
 import { useKingestion } from "@/components/workspace/kingestion-provider";
-import { WorkflowChecklist } from "@/components/workspace/workflow-checklist";
 import {
   buildCaseAddress,
   formatDate,
@@ -27,6 +27,7 @@ import {
   getSlaLabel,
   getTeamLabel
 } from "@/lib/kingston/helpers";
+import type { CaseAttachment } from "@/lib/kingston/types";
 
 type DetailTab = "resumen" | "cliente" | "producto" | "operacion" | "historial";
 
@@ -50,6 +51,41 @@ function formatUploadSize(size: number) {
   return `${Math.max(1, Math.round(size / 1024))} KB`;
 }
 
+function inferAttachmentKind(file: File): CaseAttachment["kind"] {
+  const normalizedName = file.name.toLowerCase();
+
+  if (file.type.startsWith("image/")) {
+    return "proof";
+  }
+
+  if (normalizedName.endsWith(".eml") || normalizedName.endsWith(".msg")) {
+    return "mail";
+  }
+
+  if (normalizedName.includes("guia") || normalizedName.includes("tracking")) {
+    return "guide";
+  }
+
+  if (normalizedName.includes("form") || normalizedName.includes("formulario")) {
+    return "form";
+  }
+
+  return "proof";
+}
+
+async function getPreviewUrl(file: File) {
+  if (!file.type.startsWith("image/")) {
+    return undefined;
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("No pude leer el archivo."));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function CaseDetailModule() {
   const params = useParams<{ caseId: string }>();
   const searchParams = useSearchParams();
@@ -58,8 +94,19 @@ export function CaseDetailModule() {
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [attachmentSuccess, setAttachmentSuccess] = useState<string | null>(null);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
-  const { findCaseById, activeOwners, assignCaseOwner, updateCaseStatus, addCaseAttachment, auditLog, recordCaseView } =
-    useKingestion();
+  const [replacementSkuDraft, setReplacementSkuDraft] = useState("");
+  const [replacementSuccess, setReplacementSuccess] = useState<string | null>(null);
+  const {
+    findCaseById,
+    activeOwners,
+    assignCaseOwner,
+    updateCaseStatus,
+    addCaseAttachment,
+    removeCaseAttachment,
+    updateReplacementSku,
+    auditLog,
+    recordCaseView
+  } = useKingestion();
   const entry = findCaseById(params.caseId);
 
   useEffect(() => {
@@ -67,6 +114,10 @@ export function CaseDetailModule() {
     hasLoggedView.current = true;
     recordCaseView(entry.id);
   }, [entry, recordCaseView]);
+
+  useEffect(() => {
+    setReplacementSkuDraft(entry?.replacementSku ?? "");
+  }, [entry?.replacementSku]);
 
   if (!entry) {
     return (
@@ -88,12 +139,10 @@ export function CaseDetailModule() {
   }));
   const caseAudit = auditLog.filter((item) => item.entityType === "case" && item.entityId === entry.id).slice(0, 10);
   const banking = entry.banking;
-  const proofAttachments = entry.attachments.filter(
-    (attachment) => attachment.kind === "proof" || attachment.kind === "photo"
-  );
-  const latestProofAttachment = proofAttachments[0] ?? null;
+  const latestProofAttachment =
+    entry.attachments.find((attachment) => attachment.kind === "proof" || attachment.kind === "photo") ?? null;
 
-  const handleProofUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAttachmentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -104,45 +153,61 @@ export function CaseDetailModule() {
     setAttachmentError(null);
     setAttachmentSuccess(null);
 
-    if (!file.type.startsWith("image/")) {
-      setAttachmentError("Solo se pueden cargar imagenes para el comprobante del cliente.");
-      return;
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-      setAttachmentError("La imagen no puede superar los 2 MB para mantener la app liviana.");
+    if (file.size > 4 * 1024 * 1024) {
+      setAttachmentError("El archivo no puede superar los 4 MB para mantener la app liviana.");
       return;
     }
 
     setIsUploadingAttachment(true);
 
     try {
-      const previewUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(new Error("No pude leer la imagen."));
-        reader.readAsDataURL(file);
-      });
-
+      const previewUrl = await getPreviewUrl(file);
       const saved = addCaseAttachment(entry.id, {
         name: file.name,
-        kind: "proof",
+        kind: inferAttachmentKind(file),
         sizeLabel: formatUploadSize(file.size),
         mimeType: file.type,
         previewUrl
       });
 
       if (!saved) {
-        setAttachmentError("No pude guardar el comprobante en este caso.");
+        setAttachmentError("No pude guardar el adjunto en este caso.");
         return;
       }
 
-      setAttachmentSuccess("Comprobante cargado correctamente.");
+      setAttachmentSuccess("Adjunto cargado correctamente.");
     } catch {
-      setAttachmentError("No pude procesar la imagen. Probá con otro archivo.");
+      setAttachmentError("No pude procesar el archivo. Proba con otro.");
     } finally {
       setIsUploadingAttachment(false);
     }
+  };
+
+  const handleRemoveAttachment = (attachmentId: string, attachmentName: string) => {
+    const confirmed = window.confirm(`Se va a eliminar ${attachmentName}. Continuar?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const removed = removeCaseAttachment(entry.id, attachmentId);
+    if (!removed) {
+      setAttachmentError("No pude eliminar el adjunto.");
+      return;
+    }
+
+    setAttachmentError(null);
+    setAttachmentSuccess("Adjunto eliminado correctamente.");
+  };
+
+  const handleReplacementSkuSave = () => {
+    const updated = updateReplacementSku(entry.id, replacementSkuDraft);
+
+    if (!updated) {
+      setReplacementSuccess("No pude guardar el SKU de reemplazo.");
+      return;
+    }
+
+    setReplacementSuccess("SKU de reemplazo actualizado.");
   };
 
   return (
@@ -150,11 +215,10 @@ export function CaseDetailModule() {
       <header className="workspace-page-header">
         <div className="workspace-page-header-row">
           <div>
-            <p className="workspace-kicker">Casos</p>
             <h1 className="workspace-title">{entry.internalNumber}</h1>
           </div>
 
-          <div className="workspace-chip-row">
+          <div className="workspace-inline-actions">
             <Link className="workspace-button-secondary" href="/cases">
               Volver a abiertos
             </Link>
@@ -177,10 +241,6 @@ export function CaseDetailModule() {
         </p>
       </header>
 
-      <SectionPanel title="Cambio rapido de etapa" description="Checklist operativo para avanzar o corregir el estado del caso.">
-        <WorkflowChecklist value={entry.externalStatus} onChange={(status) => updateCaseStatus(entry.id, status)} />
-      </SectionPanel>
-
       <ModuleSubnav
         items={[
           { href: `/cases/${entry.id}?tab=resumen`, label: "Resumen", active: tab === "resumen" },
@@ -189,6 +249,12 @@ export function CaseDetailModule() {
           { href: `/cases/${entry.id}?tab=operacion`, label: "Operacion", active: tab === "operacion" },
           { href: `/cases/${entry.id}?tab=historial`, label: "Historial", active: tab === "historial" }
         ]}
+        aside={
+          <label className="workspace-label workspace-stage-dropdown">
+            <span>Cambio de etapa</span>
+            <CaseStatusSelect value={entry.externalStatus} onChange={(status) => updateCaseStatus(entry.id, status)} />
+          </label>
+        }
       />
 
       {tab === "resumen" ? (
@@ -353,7 +419,7 @@ export function CaseDetailModule() {
           <SectionPanel title="Producto y falla" description="Datos tecnicos para validar reemplazo, stock y catalogacion.">
             <dl className="workspace-data-list">
               <div className="workspace-data-item">
-                <dt>SKU</dt>
+                <dt>SKU fallado</dt>
                 <dd>{entry.sku}</dd>
               </div>
               <div className="workspace-data-item">
@@ -372,31 +438,59 @@ export function CaseDetailModule() {
           </SectionPanel>
 
           <SectionPanel title="Abastecimiento" description="Lectura completa de stock local, mayorista y dependencia con Kingston.">
-            <dl className="workspace-data-list">
-              <div className="workspace-data-item">
-                <dt>Stock local</dt>
-                <dd>{getAvailabilityLabel(entry.procurement.localStock)}</dd>
+            <div className="workspace-inline-form">
+              <dl className="workspace-data-list">
+                <div className="workspace-data-item">
+                  <dt>Stock local</dt>
+                  <dd>{getAvailabilityLabel(entry.procurement.localStock)}</dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Stock mayorista</dt>
+                  <dd>
+                    {getAvailabilityLabel(entry.procurement.wholesalerStock)}
+                    {entry.procurement.wholesalerName ? ` / ${entry.procurement.wholesalerName}` : ""}
+                  </dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Pedido a Kingston</dt>
+                  <dd>{entry.procurement.requiresKingstonOrder ? "Si" : "No"}</dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Fecha de solicitud</dt>
+                  <dd>
+                    {entry.procurement.kingstonRequestedAt
+                      ? formatDateTime(entry.procurement.kingstonRequestedAt)
+                      : "Sin solicitar"}
+                  </dd>
+                </div>
+                <div className="workspace-data-item">
+                  <dt>Arribo desde USA</dt>
+                  <dd>
+                    {entry.procurement.receivedFromUsaAt
+                      ? formatDateTime(entry.procurement.receivedFromUsaAt)
+                      : "Pendiente"}
+                  </dd>
+                </div>
+              </dl>
+
+              <label className="workspace-label">
+                <span>SKU de reemplazo</span>
+                <input
+                  className="workspace-input"
+                  value={replacementSkuDraft}
+                  onChange={(event) => setReplacementSkuDraft(event.target.value)}
+                  placeholder="Ej. KF556C40BBAK2-32"
+                />
+              </label>
+
+              <div className="workspace-inline-actions">
+                <button className="workspace-button" type="button" onClick={handleReplacementSkuSave}>
+                  Guardar SKU de reemplazo
+                </button>
               </div>
-              <div className="workspace-data-item">
-                <dt>Stock mayorista</dt>
-                <dd>
-                  {getAvailabilityLabel(entry.procurement.wholesalerStock)}
-                  {entry.procurement.wholesalerName ? ` / ${entry.procurement.wholesalerName}` : ""}
-                </dd>
-              </div>
-              <div className="workspace-data-item">
-                <dt>Pedido a Kingston</dt>
-                <dd>{entry.procurement.requiresKingstonOrder ? "Si" : "No"}</dd>
-              </div>
-              <div className="workspace-data-item">
-                <dt>Fecha de solicitud</dt>
-                <dd>{entry.procurement.kingstonRequestedAt ? formatDateTime(entry.procurement.kingstonRequestedAt) : "Sin solicitar"}</dd>
-              </div>
-              <div className="workspace-data-item">
-                <dt>Arribo desde USA</dt>
-                <dd>{entry.procurement.receivedFromUsaAt ? formatDateTime(entry.procurement.receivedFromUsaAt) : "Pendiente"}</dd>
-              </div>
-            </dl>
+
+              {replacementSuccess ? <div className="workspace-empty">{replacementSuccess}</div> : null}
+            </div>
           </SectionPanel>
         </div>
       ) : null}
@@ -446,8 +540,8 @@ export function CaseDetailModule() {
           </div>
 
           <SectionPanel
-            title="Comprobante del cliente"
-            description="Carga de imagen para el comprobante y acceso rapido a los datos del cliente para reintegros."
+            title="Reintegro y cliente"
+            description="Resumen del comprobante, datos bancarios y accesos rapidos relacionados."
           >
             <div className="workspace-grid-2">
               <div className="workspace-inline-form">
@@ -468,23 +562,12 @@ export function CaseDetailModule() {
                   </div>
                 </div>
 
-                <label className="workspace-label">
-                  <span>Imagen del comprobante</span>
-                  <input
-                    className="workspace-file-input"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleProofUpload}
-                    disabled={isUploadingAttachment}
-                  />
-                </label>
-
-                {attachmentError ? <div className="workspace-empty">{attachmentError}</div> : null}
-                {attachmentSuccess ? <div className="workspace-empty">{attachmentSuccess}</div> : null}
-
                 <div className="workspace-inline-actions">
                   <Link className="workspace-button-secondary" href={`/cases/${entry.id}?tab=cliente`}>
                     Ver datos del cliente
+                  </Link>
+                  <Link className="workspace-button-secondary" href={`/cases/${entry.id}?tab=historial`}>
+                    Gestionar adjuntos
                   </Link>
                   <Link className="workspace-button-secondary" href="/reimbursements">
                     Ir a reintegros
@@ -516,33 +599,59 @@ export function CaseDetailModule() {
       {tab === "historial" ? (
         <>
           <div className="workspace-grid-2">
-            <SectionPanel title="Adjuntos" description="Correos, fotos, comprobantes y formularios del caso.">
-              {entry.attachments.length === 0 ? (
-                <div className="workspace-empty">No hay adjuntos cargados en este caso.</div>
-              ) : (
-                <div className="space-y-3">
-                  {entry.attachments.map((attachment) => (
-                    <article key={attachment.id} className="workspace-list-card">
-                      <div className="text-sm font-semibold text-white">{attachment.name}</div>
-                      <div className="mt-1 text-sm text-white/58">
-                        {getAttachmentKindLabel(attachment.kind)} / {attachment.sizeLabel}
-                      </div>
-                      {attachment.previewUrl ? (
-                        <div className="workspace-proof-preview mt-3">
-                          <img
-                            src={attachment.previewUrl}
-                            alt={`Adjunto ${attachment.name}`}
-                            className="workspace-proof-image"
-                          />
+            <SectionPanel title="Adjuntos del caso" description="Ver, agregar o eliminar archivos segun la necesidad operativa.">
+              <div className="workspace-inline-form">
+                <label className="workspace-label">
+                  <span>Agregar adjunto</span>
+                  <input
+                    className="workspace-file-input"
+                    type="file"
+                    onChange={handleAttachmentUpload}
+                    disabled={isUploadingAttachment}
+                  />
+                </label>
+
+                {attachmentError ? <div className="workspace-empty">{attachmentError}</div> : null}
+                {attachmentSuccess ? <div className="workspace-empty">{attachmentSuccess}</div> : null}
+
+                {entry.attachments.length === 0 ? (
+                  <div className="workspace-empty">No hay adjuntos cargados en este caso.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {entry.attachments.map((attachment) => (
+                      <article key={attachment.id} className="workspace-list-card">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold text-white">{attachment.name}</div>
+                            <div className="mt-1 text-sm text-white/58">
+                              {getAttachmentKindLabel(attachment.kind)} / {attachment.sizeLabel}
+                            </div>
+                          </div>
+                          <button
+                            className="workspace-link-button workspace-link-button-danger"
+                            type="button"
+                            onClick={() => handleRemoveAttachment(attachment.id, attachment.name)}
+                          >
+                            Eliminar
+                          </button>
                         </div>
-                      ) : null}
-                      <div className="mt-2 text-xs uppercase tracking-[0.16em] text-white/40">
-                        {attachment.uploadedBy} / {formatDateTime(attachment.createdAt)}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
+                        {attachment.previewUrl ? (
+                          <div className="workspace-proof-preview mt-3">
+                            <img
+                              src={attachment.previewUrl}
+                              alt={`Adjunto ${attachment.name}`}
+                              className="workspace-proof-image"
+                            />
+                          </div>
+                        ) : null}
+                        <div className="mt-2 text-xs uppercase tracking-[0.16em] text-white/40">
+                          {attachment.uploadedBy} / {formatDateTime(attachment.createdAt)}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
             </SectionPanel>
 
             <SectionPanel title="Comentarios y auditoria" description="Notas internas y acciones recientes sobre el caso.">

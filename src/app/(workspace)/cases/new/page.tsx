@@ -8,7 +8,16 @@ import { useKingestion } from "@/components/workspace/kingestion-provider";
 import { ModuleSubnav } from "@/components/workspace/module-subnav";
 import { SectionPanel } from "@/components/workspace/section-panel";
 import { workflowStates } from "@/lib/kingston/data";
-import type { CasePriority, DeliveryMode, ExternalStatus, KingstonCase, Zone } from "@/lib/kingston/types";
+import type { CasePriority, DeliveryMode, KingstonCase, Zone } from "@/lib/kingston/types";
+
+type DraftAttachment = {
+  id: string;
+  name: string;
+  kind: "mail" | "photo" | "proof" | "guide" | "form";
+  sizeLabel: string;
+  mimeType?: string;
+  previewUrl?: string;
+};
 
 type DraftCase = {
   kingstonNumber: string;
@@ -17,7 +26,7 @@ type DraftCase = {
   email: string;
   phone: string;
   owner: string;
-  status: ExternalStatus;
+  status: KingstonCase["externalStatus"];
   zone: Zone;
   delivery: DeliveryMode;
   priority: CasePriority;
@@ -37,7 +46,7 @@ type DraftCase = {
   cbu: string;
   alias: string;
   accountNumber: string;
-  attachments: string;
+  attachments: DraftAttachment[];
 };
 
 function getInitialDraft(ownerName?: string): DraftCase {
@@ -68,8 +77,59 @@ function getInitialDraft(ownerName?: string): DraftCase {
     cbu: "",
     alias: "",
     accountNumber: "",
-    attachments: ""
+    attachments: []
   };
+}
+
+function createDraftAttachmentId(file: File) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `draft-attachment-${crypto.randomUUID()}`;
+  }
+
+  return `draft-attachment-${file.name}-${Date.now()}`;
+}
+
+function formatUploadSize(size: number) {
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function inferAttachmentKind(file: File): DraftAttachment["kind"] {
+  const normalizedName = file.name.toLowerCase();
+
+  if (file.type.startsWith("image/")) {
+    return "proof";
+  }
+
+  if (normalizedName.endsWith(".eml") || normalizedName.endsWith(".msg")) {
+    return "mail";
+  }
+
+  if (normalizedName.includes("guia") || normalizedName.includes("tracking")) {
+    return "guide";
+  }
+
+  if (normalizedName.includes("form") || normalizedName.includes("formulario")) {
+    return "form";
+  }
+
+  return "proof";
+}
+
+async function getPreviewUrl(file: File) {
+  if (!file.type.startsWith("image/")) {
+    return undefined;
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("No pude leer el archivo."));
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function NewCasePage() {
@@ -78,6 +138,42 @@ export default function NewCasePage() {
   const [draft, setDraft] = useState<DraftCase>(() => getInitialDraft(activeOwner?.name));
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const handleAttachmentChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+
+    if (files.length === 0) {
+      return;
+    }
+
+    const oversizedFile = files.find((file) => file.size > 4 * 1024 * 1024);
+    if (oversizedFile) {
+      setError(`El archivo ${oversizedFile.name} supera el limite de 4 MB.`);
+      return;
+    }
+
+    try {
+      const nextAttachments = await Promise.all(
+        files.map(async (file) => ({
+          id: createDraftAttachmentId(file),
+          name: file.name,
+          kind: inferAttachmentKind(file),
+          sizeLabel: formatUploadSize(file.size),
+          mimeType: file.type,
+          previewUrl: await getPreviewUrl(file)
+        }))
+      );
+
+      setError(null);
+      setDraft((current) => ({
+        ...current,
+        attachments: [...current.attachments, ...nextAttachments]
+      }));
+    } catch {
+      setError("No pude procesar uno de los adjuntos. Proba con otro archivo.");
+    }
+  };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -104,7 +200,7 @@ export default function NewCasePage() {
     ];
 
     if (requiredValues.some((value) => value.trim().length === 0)) {
-      setError("Completá los datos principales del caso antes de guardarlo.");
+      setError("Completa los datos principales del caso antes de guardarlo.");
       return;
     }
 
@@ -140,16 +236,19 @@ export default function NewCasePage() {
           alias: draft.alias,
           accountNumber: draft.accountNumber
         },
-        attachmentNames: draft.attachments
-          .split("\n")
-          .map((entry) => entry.trim())
-          .filter(Boolean)
+        attachments: draft.attachments.map((attachment) => ({
+          name: attachment.name,
+          kind: attachment.kind,
+          sizeLabel: attachment.sizeLabel,
+          mimeType: attachment.mimeType,
+          previewUrl: attachment.previewUrl
+        }))
       });
 
       router.push(`/cases/${caseId}`);
     } catch {
       setIsSaving(false);
-      setError("No pude guardar el caso. Probá de nuevo y, si sigue fallando, lo reviso.");
+      setError("No pude guardar el caso. Proba de nuevo y, si sigue fallando, lo reviso.");
     }
   };
 
@@ -264,7 +363,10 @@ export default function NewCasePage() {
                       className="workspace-select"
                       value={draft.status}
                       onChange={(event) =>
-                        setDraft((current) => ({ ...current, status: event.target.value as ExternalStatus }))
+                        setDraft((current) => ({
+                          ...current,
+                          status: event.target.value as KingstonCase["externalStatus"]
+                        }))
                       }
                     >
                       {workflowStates.map((state) => (
@@ -479,15 +581,57 @@ export default function NewCasePage() {
                   </label>
                 </div>
 
-                <label className="workspace-label mt-4">
-                  <span>Adjuntos iniciales</span>
-                  <textarea
-                    className="workspace-textarea"
-                    value={draft.attachments}
-                    onChange={(event) => setDraft((current) => ({ ...current, attachments: event.target.value }))}
-                    placeholder={"Un archivo por linea\nmail-aprobacion.eml\nremito.pdf"}
-                  />
-                </label>
+                <div className="workspace-inline-form mt-4">
+                  <label className="workspace-label">
+                    <span>Adjuntos iniciales</span>
+                    <input
+                      className="workspace-file-input"
+                      type="file"
+                      multiple
+                      onChange={handleAttachmentChange}
+                    />
+                  </label>
+
+                  {draft.attachments.length > 0 ? (
+                    <div className="space-y-3">
+                      {draft.attachments.map((attachment) => (
+                        <article key={attachment.id} className="workspace-list-card">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold text-white">{attachment.name}</div>
+                              <div className="mt-1 text-sm text-white/58">
+                                {attachment.kind} / {attachment.sizeLabel}
+                              </div>
+                            </div>
+                            <button
+                              className="workspace-link-button workspace-link-button-danger"
+                              type="button"
+                              onClick={() =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  attachments: current.attachments.filter((item) => item.id !== attachment.id)
+                                }))
+                              }
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                          {attachment.previewUrl ? (
+                            <div className="workspace-proof-preview mt-3">
+                              <img
+                                src={attachment.previewUrl}
+                                alt={`Adjunto ${attachment.name}`}
+                                className="workspace-proof-image"
+                              />
+                            </div>
+                          ) : null}
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="workspace-empty">Todavia no hay adjuntos iniciales cargados.</div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -566,11 +710,9 @@ export default function NewCasePage() {
             <div className="workspace-data-item">
               <dt>Adjuntos</dt>
               <dd>
-                {draft.attachments
-                  .split("\n")
-                  .map((entry) => entry.trim())
-                  .filter(Boolean)
-                  .join(", ") || "Sin adjuntos iniciales"}
+                {draft.attachments.length > 0
+                  ? draft.attachments.map((attachment) => attachment.name).join(", ")
+                  : "Sin adjuntos iniciales"}
               </dd>
             </div>
           </dl>

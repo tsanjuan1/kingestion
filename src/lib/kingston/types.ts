@@ -139,6 +139,7 @@ export type KingstonCase = {
   province: string;
   city: string;
   sku: string;
+  replacementSku?: string | null;
   productDescription: string;
   quantity: number;
   failureDescription: string;
