@@ -7,13 +7,15 @@ import type { ExternalStatus, KingstonCase } from "@/lib/kingston/types";
 type CaseTableProps = {
   cases: KingstonCase[];
   emptyLabel?: string;
-  onStatusChange: (caseId: string, status: ExternalStatus) => void;
+  onStatusChange: (caseId: string, status: ExternalStatus) => void | Promise<boolean>;
+  disableStatusChange?: boolean;
 };
 
 export function CaseTable({
   cases,
   emptyLabel = "No hay casos para mostrar en este modulo.",
-  onStatusChange
+  onStatusChange,
+  disableStatusChange = false
 }: CaseTableProps) {
   if (cases.length === 0) {
     return <div className="workspace-empty">{emptyLabel}</div>;
@@ -57,7 +59,12 @@ export function CaseTable({
                 <div className="font-medium text-white">{entry.zone}</div>
               </td>
               <td>
-                <CaseStatusSelect value={entry.externalStatus} onChange={(status) => onStatusChange(entry.id, status)} />
+                <CaseStatusSelect
+                  value={entry.externalStatus}
+                  zone={entry.zone}
+                  onChange={(status) => onStatusChange(entry.id, status)}
+                  disabled={disableStatusChange}
+                />
               </td>
             </tr>
           ))}

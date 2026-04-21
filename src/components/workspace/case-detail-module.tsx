@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 import { CaseStatusSelect } from "@/components/workspace/case-status-select";
 import { EventTimeline } from "@/components/workspace/event-timeline";
@@ -21,11 +21,12 @@ import {
   getDeliveryModeLabel,
   getOriginLabel,
   getOwnerInitials,
-  getOwnerTeam,
+  getOwnerRole,
   getPriorityLabel,
   getReimbursementStateLabel,
   getSlaLabel,
-  getTeamLabel
+  getTeamLabel,
+  isClosedCaseStatus
 } from "@/lib/kingston/helpers";
 import type { CaseAttachment } from "@/lib/kingston/types";
 
@@ -74,7 +75,7 @@ function inferAttachmentKind(file: File): CaseAttachment["kind"] {
 }
 
 async function getPreviewUrl(file: File) {
-  if (!file.type.startsWith("image/")) {
+  if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
     return undefined;
   }
 
@@ -89,6 +90,7 @@ async function getPreviewUrl(file: File) {
 export function CaseDetailModule() {
   const params = useParams<{ caseId: string }>();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const tab = getTab(searchParams.get("tab"));
   const hasLoggedView = useRef(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -104,7 +106,11 @@ export function CaseDetailModule() {
     addCaseAttachment,
     removeCaseAttachment,
     updateReplacementSku,
+    deleteCase,
     auditLog,
+    canDeleteCases,
+    canAccessModule,
+    canManageModule,
     recordCaseView
   } = useKingestion();
   const entry = findCaseById(params.caseId);
@@ -112,7 +118,7 @@ export function CaseDetailModule() {
   useEffect(() => {
     if (!entry || hasLoggedView.current) return;
     hasLoggedView.current = true;
-    recordCaseView(entry.id);
+    void recordCaseView(entry.id);
   }, [entry, recordCaseView]);
 
   useEffect(() => {
@@ -130,6 +136,22 @@ export function CaseDetailModule() {
       </div>
     );
   }
+
+  const canSeeCase = isClosedCaseStatus(entry.externalStatus)
+    ? canAccessModule("closed-cases")
+    : canAccessModule("open-cases");
+
+  if (!canSeeCase) {
+    return (
+      <div className="workspace-page">
+        <SectionPanel title="Sin permisos" description="Tu usuario no tiene acceso a este caso.">
+          <div className="workspace-empty">Pedi al administrador que revise tus permisos.</div>
+        </SectionPanel>
+      </div>
+    );
+  }
+
+  const canManageCases = canManageModule("open-cases");
 
   const taskItems = entry.tasks.map((task) => ({
     ...task,
@@ -153,8 +175,8 @@ export function CaseDetailModule() {
     setAttachmentError(null);
     setAttachmentSuccess(null);
 
-    if (file.size > 4 * 1024 * 1024) {
-      setAttachmentError("El archivo no puede superar los 4 MB para mantener la app liviana.");
+    if (file.size > 2 * 1024 * 1024) {
+      setAttachmentError("El archivo no puede superar los 2 MB para asegurar la sincronizacion entre equipos.");
       return;
     }
 
@@ -162,7 +184,7 @@ export function CaseDetailModule() {
 
     try {
       const previewUrl = await getPreviewUrl(file);
-      const saved = addCaseAttachment(entry.id, {
+      const saved = await addCaseAttachment(entry.id, {
         name: file.name,
         kind: inferAttachmentKind(file),
         sizeLabel: formatUploadSize(file.size),
@@ -183,13 +205,13 @@ export function CaseDetailModule() {
     }
   };
 
-  const handleRemoveAttachment = (attachmentId: string, attachmentName: string) => {
+  const handleRemoveAttachment = async (attachmentId: string, attachmentName: string) => {
     const confirmed = window.confirm(`Se va a eliminar ${attachmentName}. Continuar?`);
     if (!confirmed) {
       return;
     }
 
-    const removed = removeCaseAttachment(entry.id, attachmentId);
+    const removed = await removeCaseAttachment(entry.id, attachmentId);
     if (!removed) {
       setAttachmentError("No pude eliminar el adjunto.");
       return;
@@ -199,8 +221,8 @@ export function CaseDetailModule() {
     setAttachmentSuccess("Adjunto eliminado correctamente.");
   };
 
-  const handleReplacementSkuSave = () => {
-    const updated = updateReplacementSku(entry.id, replacementSkuDraft);
+  const handleReplacementSkuSave = async () => {
+    const updated = await updateReplacementSku(entry.id, replacementSkuDraft);
 
     if (!updated) {
       setReplacementSuccess("No pude guardar el SKU de reemplazo.");
@@ -208,6 +230,24 @@ export function CaseDetailModule() {
     }
 
     setReplacementSuccess("SKU de reemplazo actualizado.");
+  };
+
+  const handleDeleteCase = async () => {
+    const confirmed = window.confirm(`Se va a eliminar ${entry.internalNumber}. Esta accion no se puede deshacer.`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    const deleted = await deleteCase(entry.id);
+
+    if (!deleted) {
+      setAttachmentError("No pude eliminar el caso.");
+      return;
+    }
+
+    router.push("/cases");
+    router.refresh();
   };
 
   return (
@@ -219,6 +259,11 @@ export function CaseDetailModule() {
           </div>
 
           <div className="workspace-inline-actions">
+            {canDeleteCases ? (
+              <button className="workspace-button-secondary" type="button" onClick={handleDeleteCase}>
+                Eliminar caso
+              </button>
+            ) : null}
             <Link className="workspace-button-secondary" href="/cases">
               Volver a abiertos
             </Link>
@@ -252,7 +297,12 @@ export function CaseDetailModule() {
         aside={
           <label className="workspace-label workspace-stage-dropdown">
             <span>Cambio de etapa</span>
-            <CaseStatusSelect value={entry.externalStatus} onChange={(status) => updateCaseStatus(entry.id, status)} />
+            <CaseStatusSelect
+              value={entry.externalStatus}
+              zone={entry.zone}
+              onChange={(status) => updateCaseStatus(entry.id, status)}
+              disabled={!canManageCases}
+            />
           </label>
         }
       />
@@ -268,7 +318,7 @@ export function CaseDetailModule() {
                 </div>
                 <div>
                   <div className="text-base font-semibold text-white">{entry.owner}</div>
-                  <div className="text-sm text-white/58">{getTeamLabel(getOwnerTeam(entry.owner))}</div>
+                  <div className="text-sm text-white/58">{getTeamLabel(getOwnerRole(entry.owner))}</div>
                 </div>
               </div>
             </article>
@@ -328,6 +378,7 @@ export function CaseDetailModule() {
                     className="workspace-select"
                     value={entry.owner}
                     onChange={(event) => assignCaseOwner(entry.id, event.target.value)}
+                    disabled={!canManageCases}
                   >
                     {activeOwners.map((owner) => (
                       <option key={owner.id} value={owner.name}>
@@ -480,11 +531,12 @@ export function CaseDetailModule() {
                   value={replacementSkuDraft}
                   onChange={(event) => setReplacementSkuDraft(event.target.value)}
                   placeholder="Ej. KF556C40BBAK2-32"
+                  disabled={!canManageCases}
                 />
               </label>
 
               <div className="workspace-inline-actions">
-                <button className="workspace-button" type="button" onClick={handleReplacementSkuSave}>
+                <button className="workspace-button" type="button" onClick={handleReplacementSkuSave} disabled={!canManageCases}>
                   Guardar SKU de reemplazo
                 </button>
               </div>
@@ -578,11 +630,22 @@ export function CaseDetailModule() {
               <div>
                 {latestProofAttachment?.previewUrl ? (
                   <div className="workspace-proof-preview">
-                    <img
-                      src={latestProofAttachment.previewUrl}
-                      alt={`Comprobante ${latestProofAttachment.name}`}
-                      className="workspace-proof-image"
-                    />
+                    {latestProofAttachment.mimeType === "application/pdf" ? (
+                      <a
+                        className="workspace-button-secondary"
+                        href={latestProofAttachment.previewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Abrir PDF
+                      </a>
+                    ) : (
+                      <img
+                        src={latestProofAttachment.previewUrl}
+                        alt={`Comprobante ${latestProofAttachment.name}`}
+                        className="workspace-proof-image"
+                      />
+                    )}
                     <div className="workspace-case-meta">
                       {latestProofAttachment.name} / {formatDateTime(latestProofAttachment.createdAt)}
                     </div>
@@ -607,7 +670,7 @@ export function CaseDetailModule() {
                     className="workspace-file-input"
                     type="file"
                     onChange={handleAttachmentUpload}
-                    disabled={isUploadingAttachment}
+                    disabled={isUploadingAttachment || !canManageCases}
                   />
                 </label>
 
@@ -631,11 +694,25 @@ export function CaseDetailModule() {
                             className="workspace-link-button workspace-link-button-danger"
                             type="button"
                             onClick={() => handleRemoveAttachment(attachment.id, attachment.name)}
+                            disabled={!canManageCases}
                           >
                             Eliminar
                           </button>
                         </div>
                         {attachment.previewUrl ? (
+                          <div className="mt-3">
+                            <a
+                              className="workspace-link-button"
+                              href={attachment.previewUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Abrir adjunto
+                            </a>
+                          </div>
+                        ) : null}
+                        {attachment.previewUrl ? (
+                          attachment.mimeType === "application/pdf" ? null : (
                           <div className="workspace-proof-preview mt-3">
                             <img
                               src={attachment.previewUrl}
@@ -643,6 +720,7 @@ export function CaseDetailModule() {
                               className="workspace-proof-image"
                             />
                           </div>
+                          )
                         ) : null}
                         <div className="mt-2 text-xs uppercase tracking-[0.16em] text-white/40">
                           {attachment.uploadedBy} / {formatDateTime(attachment.createdAt)}

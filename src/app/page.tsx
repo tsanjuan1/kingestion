@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
 
-export default function HomePage() {
-  redirect("/dashboard");
+import { getAuthSessionUser } from "@/lib/kingston/server";
+
+export default async function HomePage() {
+  const user = await getAuthSessionUser();
+  redirect(user ? "/dashboard" : "/login");
 }

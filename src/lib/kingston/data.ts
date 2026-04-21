@@ -1,122 +1,174 @@
-import type { KingstonCase, OwnerDirectoryEntry, TransitionRule, WorkflowState } from "@/lib/kingston/types";
+import type {
+  KingstonCase,
+  ModulePermissionKey,
+  ModulePermissions,
+  OwnerDirectoryEntry,
+  TransitionRule,
+  UserRole,
+  WorkflowState
+} from "@/lib/kingston/types";
 
-export const referenceNow = "2026-04-17T10:00:00-03:00";
+export const referenceNow = "2026-04-21T10:00:00-03:00";
 
-export const ownerDirectory: OwnerDirectoryEntry[] = [
-  { id: "owner-lucia-costa", name: "Lucia Costa", team: "Operations", initials: "LC", email: "lucia.costa@anyx.com.ar", active: true },
-  { id: "owner-martin-ponce", name: "Martin Ponce", team: "Logistics", initials: "MP", email: "martin.ponce@anyx.com.ar", active: true },
-  { id: "owner-camila-rios", name: "Camila Rios", team: "Purchasing", initials: "CR", email: "camila.rios@anyx.com.ar", active: true },
-  { id: "owner-ivan-sosa", name: "Ivan Sosa", team: "Warehouse", initials: "IS", email: "ivan.sosa@anyx.com.ar", active: true },
-  { id: "owner-sofia-mendez", name: "Sofia Mendez", team: "Management", initials: "SM", email: "sofia.mendez@anyx.com.ar", active: true }
+export const modulePermissionKeys: ModulePermissionKey[] = [
+  "summary",
+  "open-cases",
+  "reimbursements",
+  "pending-purchases",
+  "pending-service",
+  "closed-cases",
+  "reports",
+  "settings"
 ];
+
+function createPermissionMap(view: ModulePermissionKey[], manage: ModulePermissionKey[] = []): ModulePermissions {
+  return modulePermissionKeys.reduce<ModulePermissions>((accumulator, key) => {
+    accumulator[key] = {
+      view: view.includes(key),
+      manage: manage.includes(key)
+    };
+    return accumulator;
+  }, {} as ModulePermissions);
+}
+
+export function getDefaultPermissionsForRole(role: UserRole): ModulePermissions {
+  switch (role) {
+    case "ADMIN":
+      return createPermissionMap(modulePermissionKeys, modulePermissionKeys);
+    case "SALES":
+      return createPermissionMap(["summary", "open-cases", "closed-cases", "reports"], ["open-cases"]);
+    case "TECHNICAL_SERVICE":
+      return createPermissionMap(
+        ["summary", "open-cases", "pending-service", "closed-cases"],
+        ["pending-service", "open-cases"]
+      );
+    case "PURCHASING":
+      return createPermissionMap(
+        ["summary", "open-cases", "reimbursements", "pending-purchases", "closed-cases", "reports"],
+        ["reimbursements", "pending-purchases"]
+      );
+    case "PAYMENTS":
+      return createPermissionMap(["summary", "reimbursements", "reports"], ["reimbursements"]);
+    default:
+      return createPermissionMap(["summary"]);
+  }
+}
+
+export const ownerDirectory: OwnerDirectoryEntry[] = [];
 
 export const workflowStates: WorkflowState[] = [
   {
     status: "Informado",
-    category: "active",
+    category: "service",
     order: 1,
-    description: "El caso ingreso desde Kingston y todavia esta en la etapa de validacion inicial.",
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "El caso entro al circuito y todavia esta pendiente de validacion tecnica inicial.",
     substatuses: [
-      "Caso recibido de Kingston",
-      "Mail de confirmacion al remitente enviado",
-      "Mail al end user enviado",
-      "Caso creado en sistema",
-      "Pendiente clasificacion de zona",
-      "Pendiente validacion stock local"
+      "Caso recibido",
+      "Validacion inicial pendiente",
+      "Ticket revisado por servicio tecnico"
     ]
   },
   {
     status: "Aviso de envio",
-    category: "active",
+    category: "service",
     order: 2,
-    description: "El cliente recibio instrucciones y el equipo espera la evidencia del envio o la recepcion fisica.",
-    substatuses: [
-      "Instrucciones enviadas al cliente",
-      "Formulario web pendiente",
-      "Comprobante de envio pendiente",
-      "Producto en transito a ANYX",
-      "Producto recibido pendiente de registrar"
-    ]
+    zones: ["Interior / Gran Buenos Aires"],
+    description: "Se enviaron instrucciones para que el cliente despache el producto a ANYX.",
+    substatuses: ["Instrucciones enviadas", "Comprobante pendiente", "Producto en transito"]
   },
   {
     status: "Producto recepcionado y en preparacion",
-    category: "active",
+    category: "service",
     order: 3,
-    description: "ANYX ya recibio el producto fallado y esta definiendo disponibilidad y via de resolucion.",
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "ANYX ya recibio el producto fallado y valida stock, reintegro y proximo paso.",
     substatuses: [
-      "Producto fallado recibido",
-      "Pendiente chequeo stock local",
-      "Stock local disponible",
-      "Sin stock local",
-      "Pendiente consulta a mayoristas",
-      "Mayorista disponible",
-      "Sin disponibilidad mayorista"
+      "Producto recibido",
+      "Chequeo de stock local",
+      "Chequeo de mayoristas",
+      "Definicion de via de resolucion"
     ]
   },
   {
-    status: "Pedido etiqueta",
-    category: "delivery",
+    status: "Pedido Kingston",
+    category: "purchasing",
     order: 4,
-    description: "El caso esta en preparacion interna para salida o retiro, con foco en catalogacion y etiquetado.",
-    substatuses: [
-      "Pendiente catalogacion RMA",
-      "Catalogado por tecnico",
-      "Pendiente disposicion logistica",
-      "Pendiente definicion retiro o despacho"
-    ]
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "No hubo disponibilidad local y el caso depende de reposicion con Kingston.",
+    substatuses: ["Solicitud interna armada", "Pedido enviado", "Esperando arribo"]
   },
   {
-    status: "Pedido deposito",
-    category: "delivery",
+    status: "Pedido deposito y etiquetado",
+    category: "service",
     order: 5,
-    description: "El reemplazo ya esta liberado o debe pasar por compras y deposito antes de entregarse.",
-    substatuses: [
-      "Pendiente liberacion por Compras",
-      "Mercaderia liberada",
-      "Pendiente pasaje a deposito RMA",
-      "Producto en deposito RMA"
-    ]
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "Servicio tecnico y deposito preparan el reemplazo para continuar el circuito.",
+    substatuses: ["Catalogacion pendiente", "Catalogado", "Etiquetado pendiente", "Listo para compras"]
   },
   {
-    status: "Pedido a Kingston",
-    category: "active",
+    status: "Liberar mercaderia",
+    category: "purchasing",
     order: 6,
-    description: "No hubo disponibilidad local y el caso depende de reposicion o recepcion desde EEUU.",
-    substatuses: [
-      "Pedido interno armado",
-      "Pendiente consolidacion",
-      "Pedido enviado a Kingston",
-      "Esperando arribo desde EEUU",
-      "Parte recibida"
-    ]
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "Compras debe liberar la mercaderia para continuar con la OV y la entrega.",
+    substatuses: ["Pendiente aprobacion", "Liberacion en revision", "Listo para OV"]
+  },
+  {
+    status: "OV creada",
+    category: "purchasing",
+    order: 7,
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "La OV ya existe y el caso queda en seguimiento de compras hasta pasar a entrega.",
+    substatuses: ["OV pendiente de validacion", "OV creada", "Esperando salida operativa"]
+  },
+  {
+    status: "Pedido guia",
+    category: "delivery",
+    order: 8,
+    zones: ["Interior / Gran Buenos Aires"],
+    description: "Logistica gestiona guia y datos finales para el despacho.",
+    substatuses: ["Transportista definido", "Guia solicitada", "Guia confirmada"]
   },
   {
     status: "Producto enviado",
     category: "delivery",
-    order: 7,
-    description: "El reemplazo salio de ANYX y se controla despacho, tracking y entrega final.",
-    substatuses: ["Guia solicitada", "Guia cargada", "Despachado", "Tracking informado", "Entregado"]
+    order: 9,
+    zones: ["Interior / Gran Buenos Aires"],
+    description: "El reemplazo ya fue despachado y queda pendiente la entrega efectiva.",
+    substatuses: ["Despachado", "Tracking informado", "Esperando entrega"]
   },
   {
     status: "Producto listo para retiro",
     category: "delivery",
     order: 8,
-    description: "El reemplazo ya esta disponible para mostrador y se sigue hasta la entrega efectiva.",
-    substatuses: ["Aviso de retiro enviado", "Retiro pendiente", "Producto entregado en mostrador"]
+    zones: ["Capital / AMBA"],
+    description: "El reemplazo esta disponible en ANYX y se espera retiro del cliente.",
+    substatuses: ["Aviso enviado", "Retiro pendiente", "Cliente confirmado"]
   },
   {
     status: "Realizado",
     category: "terminal",
-    order: 9,
-    description: "El cambio fue completado y la entrega quedo confirmada.",
-    substatuses: ["Cambio exitoso", "Caso finalizado"]
+    order: 10,
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "El caso termino correctamente con entrega o retiro confirmado.",
+    substatuses: ["Entrega confirmada", "Caso finalizado"]
+  },
+  {
+    status: "Vencido",
+    category: "terminal",
+    order: 11,
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "El caso quedo vencido por falta de respuesta o accion del cliente.",
+    substatuses: ["Sin respuesta", "Vencimiento registrado"]
   },
   {
     status: "Cerrado",
     category: "terminal",
-    order: 10,
-    description: "El caso fue cancelado o cerrado administrativamente por decision interna o de Kingston.",
-    substatuses: ["Caso cerrado por Kingston", "Caso cancelado administrativamente"]
+    order: 12,
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "El caso se cerro administrativamente por decision interna o de Kingston.",
+    substatuses: ["Cierre administrativo", "Cierre solicitado por Kingston"]
   }
 ];
 
@@ -124,44 +176,58 @@ export const transitionRules: TransitionRule[] = [
   {
     from: "Informado",
     to: "Aviso de envio",
-    requiredFields: ["zona", "responsable actual", "mail de instrucciones"],
-    autoTasks: ["Crear seguimiento de envio", "Alertar a operaciones si no hay comprobante"],
-    note: "No avanzar si la zona todavia no esta definida."
+    zones: ["Interior / Gran Buenos Aires"],
+    requiredFields: ["zona definida", "contacto validado"],
+    autoTasks: ["Enviar instructivo de envio"],
+    note: "Solo aplica cuando el producto debe viajar desde el interior hacia ANYX."
   },
   {
-    from: "Aviso de envio",
+    from: "Informado",
     to: "Producto recepcionado y en preparacion",
-    requiredFields: ["fecha de recepcion", "usuario que recibio", "adjunto de evidencia"],
-    autoTasks: ["Validar stock local", "Crear evento de recepcion"],
-    note: "La recepcion fisica es obligatoria antes de abrir la etapa de stock."
+    zones: ["Capital / AMBA"],
+    requiredFields: ["recepcion confirmada"],
+    autoTasks: ["Validar stock local"],
+    note: "Para Capital / AMBA el caso puede pasar directo a recepcion y preparacion."
   },
   {
     from: "Producto recepcionado y en preparacion",
-    to: "Pedido a Kingston",
-    requiredFields: ["sin stock local", "sin stock mayorista", "pedido consolidado"],
-    autoTasks: ["Notificar a compras", "Abrir seguimiento de arribo EEUU"],
-    note: "Solo aplica cuando no existe disponibilidad local ni de mayoristas."
+    to: "Pedido Kingston",
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    requiredFields: ["sin stock local", "sin stock mayorista"],
+    autoTasks: ["Notificar a compras"],
+    note: "No avanzar a Kingston sin dejar registrada la falta de disponibilidad local."
   },
   {
-    from: "Pedido deposito",
-    to: "Producto enviado",
-    requiredFields: ["transportista", "numero de guia", "fecha de despacho"],
-    autoTasks: ["Enviar tracking", "Cerrar tarea de preparacion"],
-    note: "Despacho sin guia no es valido."
+    from: "Pedido deposito y etiquetado",
+    to: "Liberar mercaderia",
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    requiredFields: ["catalogacion terminada"],
+    autoTasks: ["Abrir seguimiento de compras"],
+    note: "La liberacion se trabaja recien cuando servicio tecnico deja el reemplazo listo."
   },
   {
-    from: "Pedido etiqueta",
+    from: "Liberar mercaderia",
+    to: "OV creada",
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    requiredFields: ["liberacion aprobada"],
+    autoTasks: ["Avisar a compras"],
+    note: "La OV se crea solo despues de la liberacion de mercaderia."
+  },
+  {
+    from: "OV creada",
+    to: "Pedido guia",
+    zones: ["Interior / Gran Buenos Aires"],
+    requiredFields: ["direccion valida", "transportista definido"],
+    autoTasks: ["Pedir guia"],
+    note: "Solo aplica para la rama de despacho."
+  },
+  {
+    from: "OV creada",
     to: "Producto listo para retiro",
-    requiredFields: ["confirmacion de disponibilidad", "aviso de retiro"],
-    autoTasks: ["Crear tarea de mostrador", "Avisar al cliente"],
-    note: "El retiro queda abierto hasta registrar entrega efectiva."
-  },
-  {
-    from: "Producto enviado",
-    to: "Realizado",
-    requiredFields: ["confirmacion de entrega"],
-    autoTasks: ["Cerrar caso", "Registrar resultado exitoso"],
-    note: "El caso no se completa solo con despacho."
+    zones: ["Capital / AMBA"],
+    requiredFields: ["retiro confirmado"],
+    autoTasks: ["Avisar disponibilidad"],
+    note: "Capital / AMBA sigue por retiro sin pasar por guia."
   }
 ];
 
@@ -177,13 +243,13 @@ export const kingstonCases: KingstonCase[] = [
     zone: "Interior / Gran Buenos Aires",
     deliveryMode: "Dispatch",
     priority: "Critical",
-    owner: "Lucia Costa",
-    nextAction: "Consolidar pedido a Kingston y confirmar forecast de arribo",
-    externalStatus: "Pedido a Kingston",
-    internalSubstatus: "Pendiente consolidacion",
+    owner: "Sin asignar",
+    nextAction: "Consolidar pedido a Kingston y confirmar forecast de arribo.",
+    externalStatus: "Pedido Kingston",
+    internalSubstatus: "Esperando arribo",
     openedAt: "2026-04-03T09:20:00-03:00",
-    updatedAt: "2026-04-16T12:45:00-03:00",
-    slaDueAt: "2026-04-18T18:00:00-03:00",
+    updatedAt: "2026-04-20T12:45:00-03:00",
+    slaDueAt: "2026-04-23T18:00:00-03:00",
     address: "Av. Colon 4132",
     province: "Cordoba",
     city: "Cordoba",
@@ -192,8 +258,7 @@ export const kingstonCases: KingstonCase[] = [
     quantity: 12,
     failureDescription: "Falla intermitente reportada por lote en entorno de servidor liviano.",
     origin: "Kingston email",
-    observations:
-      "Cliente con reposicion critica porque el lote impacta una instalacion bancaria. Kingston aprobo sin disponibilidad local.",
+    observations: "Caso critico por reposicion para una cuenta bancaria.",
     logistics: {
       mode: "Dispatch",
       address: "Av. Colon 4132, Cordoba",
@@ -210,7 +275,7 @@ export const kingstonCases: KingstonCase[] = [
       wholesalerStock: "Unavailable",
       wholesalerName: null,
       requiresKingstonOrder: true,
-      kingstonRequestedAt: "2026-04-15T17:30:00-03:00",
+      kingstonRequestedAt: "2026-04-20T11:30:00-03:00",
       receivedFromUsaAt: null,
       releasedByPurchasing: false,
       releasedAt: null,
@@ -223,57 +288,22 @@ export const kingstonCases: KingstonCase[] = [
         title: "Consolidar pedido EEUU",
         description: "Validar cantidades finales con compras antes del corte diario.",
         type: "stock",
-        assignee: "Camila Rios",
+        assignee: "Sin asignar",
         priority: "Critical",
-        dueAt: "2026-04-16T17:30:00-03:00",
+        dueAt: "2026-04-22T17:30:00-03:00",
         state: "In progress"
-      },
-      {
-        id: "task-24018-2",
-        title: "Avisar a cliente sobre falta local",
-        description: "Enviar update preventivo con ETA estimada y responsable.",
-        type: "communication",
-        assignee: "Lucia Costa",
-        priority: "High",
-        dueAt: "2026-04-16T18:00:00-03:00",
-        state: "Pending"
       }
     ],
-    comments: [
-      {
-        id: "comment-24018-1",
-        author: "Sofia Mendez",
-        body: "Mantener visibilidad diaria. Es una cuenta con alta sensibilidad operativa.",
-        internal: true,
-        createdAt: "2026-04-16T11:10:00-03:00"
-      }
-    ],
-    attachments: [
-      {
-        id: "attachment-24018-1",
-        name: "kingston-approval-thread.eml",
-        kind: "mail",
-        sizeLabel: "148 KB",
-        uploadedBy: "Lucia Costa",
-        createdAt: "2026-04-03T09:23:00-03:00"
-      }
-    ],
+    comments: [],
+    attachments: [],
     events: [
       {
         id: "event-24018-1",
         kind: "status-change",
         title: "Caso creado",
-        detail: "Ingreso inicial desde autorizacion Kingston y clasificacion de zona.",
-        actor: "Lucia Costa",
+        detail: "Ingreso inicial desde autorizacion Kingston.",
+        actor: "Sistema",
         createdAt: "2026-04-03T09:20:00-03:00"
-      },
-      {
-        id: "event-24018-2",
-        kind: "procurement",
-        title: "Sin stock local ni mayorista",
-        detail: "Compras confirmo ausencia en plaza y habilito pedido a Kingston.",
-        actor: "Camila Rios",
-        createdAt: "2026-04-15T17:28:00-03:00"
       }
     ]
   },
@@ -288,13 +318,13 @@ export const kingstonCases: KingstonCase[] = [
     zone: "Capital / AMBA",
     deliveryMode: "Pickup",
     priority: "Medium",
-    owner: "Martin Ponce",
-    nextAction: "Confirmar retiro del cliente y cerrar entrega en mostrador",
+    owner: "Sin asignar",
+    nextAction: "Confirmar retiro del cliente y cerrar entrega en mostrador.",
     externalStatus: "Producto listo para retiro",
     internalSubstatus: "Retiro pendiente",
     openedAt: "2026-04-08T10:05:00-03:00",
-    updatedAt: "2026-04-16T09:35:00-03:00",
-    slaDueAt: "2026-04-17T13:00:00-03:00",
+    updatedAt: "2026-04-20T09:35:00-03:00",
+    slaDueAt: "2026-04-22T13:00:00-03:00",
     address: "Parana 758",
     province: "CABA",
     city: "Buenos Aires",
@@ -323,34 +353,25 @@ export const kingstonCases: KingstonCase[] = [
       kingstonRequestedAt: null,
       receivedFromUsaAt: null,
       releasedByPurchasing: true,
-      releasedAt: "2026-04-14T12:00:00-03:00",
+      releasedAt: "2026-04-18T12:00:00-03:00",
       movedToRmaWarehouse: true,
-      movedToRmaWarehouseAt: "2026-04-14T15:20:00-03:00"
+      movedToRmaWarehouseAt: "2026-04-18T15:20:00-03:00"
     },
     tasks: [
       {
         id: "task-24022-1",
         title: "Confirmar retiro por mostrador",
-        description: "Llamar al cliente antes de las 12 y validar persona autorizada.",
+        description: "Llamar al cliente y validar persona autorizada.",
         type: "follow-up",
-        assignee: "Martin Ponce",
+        assignee: "Sin asignar",
         priority: "High",
-        dueAt: "2026-04-17T11:00:00-03:00",
+        dueAt: "2026-04-21T14:00:00-03:00",
         state: "Pending"
       }
     ],
     comments: [],
     attachments: [],
-    events: [
-      {
-        id: "event-24022-1",
-        kind: "status-change",
-        title: "Listo para retiro",
-        detail: "Se envio aviso de retiro y se asigno tarea de mostrador.",
-        actor: "Martin Ponce",
-        createdAt: "2026-04-16T09:35:00-03:00"
-      }
-    ]
+    events: []
   },
   {
     id: "rma-24025",
@@ -363,13 +384,13 @@ export const kingstonCases: KingstonCase[] = [
     zone: "Interior / Gran Buenos Aires",
     deliveryMode: "Dispatch",
     priority: "High",
-    owner: "Martin Ponce",
-    nextAction: "Monitorear entrega final y enviar cierre si llega hoy",
-    externalStatus: "Producto enviado",
-    internalSubstatus: "Tracking informado",
+    owner: "Sin asignar",
+    nextAction: "Solicitar guia y compartir tracking al cliente.",
+    externalStatus: "Pedido guia",
+    internalSubstatus: "Guia solicitada",
     openedAt: "2026-04-05T08:45:00-03:00",
-    updatedAt: "2026-04-16T14:10:00-03:00",
-    slaDueAt: "2026-04-17T18:00:00-03:00",
+    updatedAt: "2026-04-20T14:10:00-03:00",
+    slaDueAt: "2026-04-22T18:00:00-03:00",
     address: "Ruta 197 Km 2.8",
     province: "Buenos Aires",
     city: "San Miguel",
@@ -378,14 +399,14 @@ export const kingstonCases: KingstonCase[] = [
     quantity: 3,
     failureDescription: "Unidades con degradacion de performance y alerta SMART.",
     origin: "Kingston email",
-    observations: "Tracking activo por OCA. Cliente ya fue notificado con numero de guia.",
+    observations: "Cliente espera despacho con prioridad alta.",
     logistics: {
       mode: "Dispatch",
       address: "Ruta 197 Km 2.8, San Miguel",
       transporter: "OCA",
-      guideNumber: "00781249831",
-      trackingUrl: "https://tracking.oca.example/00781249831",
-      dispatchDate: "2026-04-16T13:40:00-03:00",
+      guideNumber: null,
+      trackingUrl: null,
+      dispatchDate: null,
       deliveredDate: null,
       shippingCost: "ARS 18.400",
       reimbursementState: "Requested"
@@ -398,34 +419,25 @@ export const kingstonCases: KingstonCase[] = [
       kingstonRequestedAt: null,
       receivedFromUsaAt: null,
       releasedByPurchasing: true,
-      releasedAt: "2026-04-15T11:10:00-03:00",
+      releasedAt: "2026-04-19T11:10:00-03:00",
       movedToRmaWarehouse: true,
-      movedToRmaWarehouseAt: "2026-04-15T15:00:00-03:00"
+      movedToRmaWarehouseAt: "2026-04-19T15:00:00-03:00"
     },
     tasks: [
       {
         id: "task-24025-1",
-        title: "Validar entrega con tracking",
-        description: "Revisar tracking y cerrar si se confirma recepcion.",
+        title: "Cargar numero de guia",
+        description: "Completar el despacho y enviar tracking.",
         type: "logistics",
-        assignee: "Martin Ponce",
+        assignee: "Sin asignar",
         priority: "High",
-        dueAt: "2026-04-17T16:00:00-03:00",
+        dueAt: "2026-04-21T16:00:00-03:00",
         state: "In progress"
       }
     ],
     comments: [],
     attachments: [],
-    events: [
-      {
-        id: "event-24025-1",
-        kind: "logistics",
-        title: "Despacho confirmado",
-        detail: "Se cargo guia OCA y se envio tracking al cliente.",
-        actor: "Martin Ponce",
-        createdAt: "2026-04-16T14:10:00-03:00"
-      }
-    ]
+    events: []
   },
   {
     id: "rma-24030",
@@ -438,13 +450,13 @@ export const kingstonCases: KingstonCase[] = [
     zone: "Interior / Gran Buenos Aires",
     deliveryMode: "Dispatch",
     priority: "High",
-    owner: "Lucia Costa",
-    nextAction: "Escalar falta de comprobante al cliente y definir vencimiento",
+    owner: "Sin asignar",
+    nextAction: "Escalar falta de comprobante al cliente y definir vencimiento.",
     externalStatus: "Aviso de envio",
-    internalSubstatus: "Comprobante de envio pendiente",
+    internalSubstatus: "Comprobante pendiente",
     openedAt: "2026-04-07T15:00:00-03:00",
-    updatedAt: "2026-04-15T18:20:00-03:00",
-    slaDueAt: "2026-04-16T12:00:00-03:00",
+    updatedAt: "2026-04-19T18:20:00-03:00",
+    slaDueAt: "2026-04-21T12:00:00-03:00",
     address: "San Martin 1462",
     province: "Mendoza",
     city: "Godoy Cruz",
@@ -453,8 +465,7 @@ export const kingstonCases: KingstonCase[] = [
     quantity: 2,
     failureDescription: "Modulo no reconocido despues de update de BIOS.",
     origin: "Commercial handoff",
-    observations:
-      "Cliente recibio instructivo pero no envio evidencia. Si no responde hoy debe evaluarse un cierre administrativo.",
+    observations: "Cliente recibio instructivo pero no envio evidencia.",
     logistics: {
       mode: "Dispatch",
       address: "San Martin 1462, Godoy Cruz",
@@ -482,34 +493,17 @@ export const kingstonCases: KingstonCase[] = [
       {
         id: "task-24030-1",
         title: "Ultimo seguimiento al cliente",
-        description: "Escalar por mail y telefono. Si no responde, marcar para vencimiento.",
+        description: "Escalar por mail y telefono.",
         type: "follow-up",
-        assignee: "Lucia Costa",
+        assignee: "Sin asignar",
         priority: "Critical",
-        dueAt: "2026-04-16T16:30:00-03:00",
+        dueAt: "2026-04-21T16:30:00-03:00",
         state: "Pending"
       }
     ],
-    comments: [
-      {
-        id: "comment-24030-1",
-        author: "Lucia Costa",
-        body: "Se reenvio instructivo a las 17:55. Sin acuse todavia.",
-        internal: true,
-        createdAt: "2026-04-15T18:20:00-03:00"
-      }
-    ],
+    comments: [],
     attachments: [],
-    events: [
-      {
-        id: "event-24030-1",
-        kind: "comment",
-        title: "Instructivo reenviado",
-        detail: "Segundo aviso al cliente por falta de comprobante.",
-        actor: "Lucia Costa",
-        createdAt: "2026-04-15T18:20:00-03:00"
-      }
-    ]
+    events: []
   },
   {
     id: "rma-24031",
@@ -522,13 +516,13 @@ export const kingstonCases: KingstonCase[] = [
     zone: "Capital / AMBA",
     deliveryMode: "Pickup",
     priority: "Medium",
-    owner: "Ivan Sosa",
-    nextAction: "Catalogar por tecnico y definir si sale por retiro o despacho",
-    externalStatus: "Pedido etiqueta",
-    internalSubstatus: "Catalogado por tecnico",
+    owner: "Sin asignar",
+    nextAction: "Servicio tecnico debe terminar catalogacion y etiquetado.",
+    externalStatus: "Pedido deposito y etiquetado",
+    internalSubstatus: "Catalogado",
     openedAt: "2026-04-10T11:00:00-03:00",
-    updatedAt: "2026-04-16T10:05:00-03:00",
-    slaDueAt: "2026-04-19T17:00:00-03:00",
+    updatedAt: "2026-04-20T10:05:00-03:00",
+    slaDueAt: "2026-04-23T17:00:00-03:00",
     address: "Sarmiento 920",
     province: "CABA",
     city: "Buenos Aires",
@@ -557,62 +551,44 @@ export const kingstonCases: KingstonCase[] = [
       kingstonRequestedAt: null,
       receivedFromUsaAt: null,
       releasedByPurchasing: true,
-      releasedAt: "2026-04-15T10:20:00-03:00",
+      releasedAt: "2026-04-19T10:20:00-03:00",
       movedToRmaWarehouse: true,
-      movedToRmaWarehouseAt: "2026-04-15T12:10:00-03:00"
+      movedToRmaWarehouseAt: "2026-04-19T12:10:00-03:00"
     },
     tasks: [
       {
         id: "task-24031-1",
-        title: "Definir modalidad final",
-        description: "Esperar confirmacion del cliente para retiro o despacho.",
+        title: "Finalizar etiquetado",
+        description: "Cerrar validacion tecnica y pasar a compras.",
         type: "validation",
-        assignee: "Ivan Sosa",
+        assignee: "Sin asignar",
         priority: "Medium",
-        dueAt: "2026-04-17T15:00:00-03:00",
+        dueAt: "2026-04-22T15:00:00-03:00",
         state: "Pending"
       }
     ],
     comments: [],
-    attachments: [
-      {
-        id: "attachment-24031-1",
-        name: "diagnostic-serial-photo.jpg",
-        kind: "photo",
-        sizeLabel: "1.4 MB",
-        uploadedBy: "Ivan Sosa",
-        createdAt: "2026-04-16T09:58:00-03:00"
-      }
-    ],
-    events: [
-      {
-        id: "event-24031-1",
-        kind: "attachment",
-        title: "Catalogacion tecnica",
-        detail: "Se adjunto evidencia de serial y se marco catalogado.",
-        actor: "Ivan Sosa",
-        createdAt: "2026-04-16T10:05:00-03:00"
-      }
-    ]
+    attachments: [],
+    events: []
   },
   {
-    id: "rma-24034",
-    internalNumber: "RMA-24034",
-    kingstonNumber: "KS-985402",
+    id: "rma-24035",
+    internalNumber: "RMA-24035",
+    kingstonNumber: "KS-985510",
     clientName: "Orbit Solutions",
     contactName: "Pablo Zubia",
     contactEmail: "pz@orbitsolutions.com",
     contactPhone: "+54 11 4813 8854",
     zone: "Capital / AMBA",
     deliveryMode: "Pickup",
-    priority: "Low",
-    owner: "Sofia Mendez",
-    nextAction: "Revisar si corresponde reapertura o archivo definitivo",
-    externalStatus: "Cerrado",
-    internalSubstatus: "Caso cancelado administrativamente",
-    openedAt: "2026-03-28T14:30:00-03:00",
-    updatedAt: "2026-04-14T16:00:00-03:00",
-    slaDueAt: "2026-04-10T18:00:00-03:00",
+    priority: "Medium",
+    owner: "Sin asignar",
+    nextAction: "Compras debe validar la OV y liberar la continuidad del caso.",
+    externalStatus: "OV creada",
+    internalSubstatus: "OV creada",
+    openedAt: "2026-04-11T09:15:00-03:00",
+    updatedAt: "2026-04-20T16:25:00-03:00",
+    slaDueAt: "2026-04-22T18:00:00-03:00",
     address: "Vuelta de Obligado 1823",
     province: "CABA",
     city: "Buenos Aires",
@@ -621,7 +597,131 @@ export const kingstonCases: KingstonCase[] = [
     quantity: 7,
     failureDescription: "Lote con corrupcion de datos reportada por comercio.",
     origin: "Operations load",
-    observations: "Cliente no respondio a tres seguimientos. Caso cerrado administrativamente por falta de respuesta.",
+    observations: "El caso debe ser tomado por compras para validar la OV.",
+    logistics: {
+      mode: "Pickup",
+      address: "Mostrador central ANYX",
+      transporter: null,
+      guideNumber: null,
+      trackingUrl: null,
+      dispatchDate: null,
+      deliveredDate: null,
+      shippingCost: null,
+      reimbursementState: "Not applicable"
+    },
+    procurement: {
+      localStock: "Available",
+      wholesalerStock: "Pending",
+      wholesalerName: null,
+      requiresKingstonOrder: false,
+      kingstonRequestedAt: null,
+      receivedFromUsaAt: null,
+      releasedByPurchasing: true,
+      releasedAt: "2026-04-20T11:00:00-03:00",
+      movedToRmaWarehouse: true,
+      movedToRmaWarehouseAt: "2026-04-20T12:30:00-03:00"
+    },
+    tasks: [
+      {
+        id: "task-24035-1",
+        title: "Validar OV",
+        description: "Compras debe revisar la OV creada y definir continuidad.",
+        type: "stock",
+        assignee: "Sin asignar",
+        priority: "Medium",
+        dueAt: "2026-04-22T10:00:00-03:00",
+        state: "Pending"
+      }
+    ],
+    comments: [],
+    attachments: [],
+    events: []
+  }
+];
+
+export const archivedCasesSeed: KingstonCase[] = [
+  {
+    id: "rma-23984",
+    internalNumber: "RMA-23984",
+    kingstonNumber: "KS-982771",
+    clientName: "Data Vision Patagonia",
+    contactName: "Mauro Ilardo",
+    contactEmail: "m.ilardo@datavision.com.ar",
+    contactPhone: "+54 299 481 9033",
+    zone: "Interior / Gran Buenos Aires",
+    deliveryMode: "Dispatch",
+    priority: "Medium",
+    owner: "Sin asignar",
+    nextAction: "Caso fuera de la bandeja operativa.",
+    externalStatus: "Realizado",
+    internalSubstatus: "Entrega confirmada",
+    openedAt: "2026-03-26T10:40:00-03:00",
+    updatedAt: "2026-04-09T17:10:00-03:00",
+    slaDueAt: "2026-04-10T18:00:00-03:00",
+    address: "Belgrano 455",
+    province: "Neuquen",
+    city: "Neuquen Capital",
+    sku: "KC3000/2048G",
+    productDescription: "SSD KC3000 2TB NVMe",
+    quantity: 2,
+    failureDescription: "Lote con perdida total de deteccion luego de reinicios en caliente.",
+    origin: "Kingston email",
+    observations: "Reemplazo entregado y recepcion confirmado por el cliente.",
+    logistics: {
+      mode: "Dispatch",
+      address: "Belgrano 455, Neuquen Capital, Neuquen, Argentina",
+      transporter: "Andreani",
+      guideNumber: "A99823145",
+      trackingUrl: "https://tracking.andreani.example/A99823145",
+      dispatchDate: "2026-04-08T14:15:00-03:00",
+      deliveredDate: "2026-04-09T11:20:00-03:00",
+      shippingCost: "ARS 24.900",
+      reimbursementState: "Completed"
+    },
+    procurement: {
+      localStock: "Available",
+      wholesalerStock: "Pending",
+      wholesalerName: null,
+      requiresKingstonOrder: false,
+      kingstonRequestedAt: null,
+      receivedFromUsaAt: null,
+      releasedByPurchasing: true,
+      releasedAt: "2026-04-07T09:00:00-03:00",
+      movedToRmaWarehouse: true,
+      movedToRmaWarehouseAt: "2026-04-07T12:30:00-03:00"
+    },
+    tasks: [],
+    comments: [],
+    attachments: [],
+    events: []
+  },
+  {
+    id: "rma-23980",
+    internalNumber: "RMA-23980",
+    kingstonNumber: "KS-982401",
+    clientName: "Zeta Servicios Informaticos",
+    contactName: "Carla Biondi",
+    contactEmail: "cbiondi@zetasi.com.ar",
+    contactPhone: "+54 11 4331 8820",
+    zone: "Capital / AMBA",
+    deliveryMode: "Pickup",
+    priority: "Low",
+    owner: "Sin asignar",
+    nextAction: "Caso fuera de la bandeja operativa.",
+    externalStatus: "Cerrado",
+    internalSubstatus: "Cierre administrativo",
+    openedAt: "2026-03-21T13:15:00-03:00",
+    updatedAt: "2026-03-25T16:40:00-03:00",
+    slaDueAt: "2026-03-29T18:00:00-03:00",
+    address: "Av. Santa Fe 3250",
+    province: "Buenos Aires",
+    city: "CABA",
+    sku: "DTMAXA/256GB",
+    productDescription: "Pendrive DataTraveler Max 256GB",
+    quantity: 4,
+    failureDescription: "El cliente informo fallas, pero luego solicito cerrar el proceso por reposicion propia.",
+    origin: "Operations load",
+    observations: "Kingston y ANYX acordaron cierre administrativo sin reemplazo.",
     logistics: {
       mode: "Pickup",
       address: "Mostrador central ANYX",
@@ -645,37 +745,9 @@ export const kingstonCases: KingstonCase[] = [
       movedToRmaWarehouse: false,
       movedToRmaWarehouseAt: null
     },
-    tasks: [
-      {
-        id: "task-24034-1",
-        title: "Validar reapertura",
-        description: "Si el cliente responde, reactivar workflow desde Informado.",
-        type: "validation",
-        assignee: "Sofia Mendez",
-        priority: "Low",
-        dueAt: "2026-04-18T12:00:00-03:00",
-        state: "Blocked"
-      }
-    ],
-    comments: [
-      {
-        id: "comment-24034-1",
-        author: "Sofia Mendez",
-        body: "Caso cerrado por falta de respuesta a los tres contactos registrados.",
-        internal: true,
-        createdAt: "2026-04-14T16:00:00-03:00"
-      }
-    ],
+    tasks: [],
+    comments: [],
     attachments: [],
-    events: [
-      {
-        id: "event-24034-1",
-        kind: "status-change",
-        title: "Caso cerrado por falta de respuesta",
-        detail: "Se cerro administrativamente luego de agotar los seguimientos al cliente.",
-        actor: "Sofia Mendez",
-        createdAt: "2026-04-14T16:00:00-03:00"
-      }
-    ]
+    events: []
   }
 ];

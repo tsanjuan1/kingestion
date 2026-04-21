@@ -2,49 +2,70 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { useKingestion } from "@/components/workspace/kingestion-provider";
-import { getOwnerInitials } from "@/lib/kingston/helpers";
+import { getOwnerInitials, getRoleLabel } from "@/lib/kingston/helpers";
+import type { ModulePermissionKey } from "@/lib/kingston/types";
 
 const SIDEBAR_STORAGE_KEY = "kingestion.sidebar.collapsed";
 
 const navigationItems = [
   {
+    moduleKey: "summary" as ModulePermissionKey,
     href: "/dashboard",
     label: "Resumen",
     shortLabel: "RS",
     hint: "Pantallazo general de la operacion"
   },
   {
+    moduleKey: "open-cases" as ModulePermissionKey,
     href: "/cases",
     label: "Casos abiertos",
     shortLabel: "CA",
     hint: "Bandeja operativa simple"
   },
   {
+    moduleKey: "reimbursements" as ModulePermissionKey,
     href: "/reimbursements",
     label: "Reintegros",
     shortLabel: "RE",
     hint: "Pendientes con comprobantes y cierre"
   },
   {
+    moduleKey: "pending-purchases" as ModulePermissionKey,
+    href: "/pending-purchases",
+    label: "Pendientes compras",
+    shortLabel: "PC",
+    hint: "Casos tomados por compras"
+  },
+  {
+    moduleKey: "pending-service" as ModulePermissionKey,
+    href: "/pending-service",
+    label: "Pendientes servicio tecnico",
+    shortLabel: "ST",
+    hint: "Casos en manos del servicio tecnico"
+  },
+  {
+    moduleKey: "closed-cases" as ModulePermissionKey,
     href: "/closed-cases",
     label: "Casos cerrados",
     shortLabel: "CC",
     hint: "Archivo de realizados y cerrados"
   },
   {
+    moduleKey: "reports" as ModulePermissionKey,
     href: "/reports",
     label: "Reportes",
     shortLabel: "RP",
     hint: "Consultas y exportes PDF"
   },
   {
+    moduleKey: "settings" as ModulePermissionKey,
     href: "/settings",
     label: "Configuracion",
-    shortLabel: "CF",
-    hint: "Responsables, asignaciones y auditoria"
+    shortLabel: "CFG",
+    hint: "Usuarios, permisos y auditoria"
   }
 ];
 
@@ -58,15 +79,16 @@ function isActive(pathname: string, href: string) {
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const {
     activeOwner,
-    activeOwners,
+    canAccessModule,
     dashboardSnapshot,
     themeMode,
-    setThemeMode,
-    setActiveOwner
+    setThemeMode
   } = useKingestion();
+  const visibleNavigation = navigationItems.filter((item) => canAccessModule(item.moduleKey));
 
   useEffect(() => {
     try {
@@ -80,6 +102,15 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(isSidebarCollapsed));
   }, [isSidebarCollapsed]);
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include"
+    });
+    router.push("/login");
+    router.refresh();
+  };
 
   return (
     <div className={`workspace-shell ${isSidebarCollapsed ? "workspace-shell-collapsed" : ""}`}>
@@ -124,7 +155,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="space-y-2" aria-label="Modulos principales">
-            {navigationItems.map((item) => (
+            {visibleNavigation.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -157,9 +188,9 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                   <strong className="text-white">{dashboardSnapshot.closedCases.length}</strong>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Pedido a Kingston</span>
+                  <span>Pedido Kingston</span>
                   <strong className="text-white">
-                    {dashboardSnapshot.openCases.filter((entry) => entry.externalStatus === "Pedido a Kingston").length}
+                    {dashboardSnapshot.openCases.filter((entry) => entry.externalStatus === "Pedido Kingston").length}
                   </strong>
                 </div>
                 <div className="flex items-center justify-between">
@@ -198,23 +229,29 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             <div className={`workspace-sidebar-session ${isSidebarCollapsed ? "workspace-sidebar-session-collapsed" : ""}`}>
               <div className="workspace-user-badge">{getOwnerInitials(activeOwner?.name ?? "Sin sesion")}</div>
               {!isSidebarCollapsed ? (
-                <div className="workspace-inline-form">
-                  <label className="workspace-label">
-                    <span>Usuario activo</span>
-                    <select
-                      className="workspace-select"
-                      value={activeOwner?.id ?? activeOwners[0]?.id ?? ""}
-                      onChange={(event) => setActiveOwner(event.target.value)}
-                    >
-                      {activeOwners.map((owner) => (
-                        <option key={owner.id} value={owner.id}>
-                          {owner.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                <div className="space-y-3">
+                  <div className="workspace-sidebar-session-copy">
+                    <div className="workspace-topbar-label">Usuario activo</div>
+                    <div className="text-sm font-semibold text-white">{activeOwner.name}</div>
+                    <div className="text-xs uppercase tracking-[0.16em] text-white/42">
+                      {getRoleLabel(activeOwner.team)}
+                    </div>
+                  </div>
+                  <button className="workspace-button-secondary w-full justify-center" type="button" onClick={handleLogout}>
+                    Cerrar sesion
+                  </button>
                 </div>
-              ) : null}
+              ) : (
+                <button
+                  className="workspace-sidebar-icon-button"
+                  type="button"
+                  onClick={handleLogout}
+                  aria-label="Cerrar sesion"
+                  title="Cerrar sesion"
+                >
+                  Salir
+                </button>
+              )}
             </div>
           </div>
         </div>

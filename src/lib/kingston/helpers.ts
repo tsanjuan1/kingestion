@@ -1,5 +1,22 @@
-import { kingstonCases, ownerDirectory, referenceNow, workflowStates } from "@/lib/kingston/data";
-import type { DeliveryMode, EventKind, ExternalStatus, KingstonCase, OwnerDirectoryEntry } from "@/lib/kingston/types";
+import {
+  archivedCasesSeed,
+  getDefaultPermissionsForRole,
+  kingstonCases,
+  ownerDirectory,
+  referenceNow,
+  workflowStates
+} from "@/lib/kingston/data";
+import type {
+  DeliveryMode,
+  EventKind,
+  ExternalStatus,
+  KingstonCase,
+  ModulePermissionKey,
+  ModulePermissions,
+  OwnerDirectoryEntry,
+  UserRole,
+  Zone
+} from "@/lib/kingston/types";
 
 const numberFormatter = new Intl.NumberFormat("es-AR");
 
@@ -16,8 +33,43 @@ const dateTimeFormatter = new Intl.DateTimeFormat("es-AR", {
   minute: "2-digit"
 });
 
-export const CLOSED_CASE_STATUSES: ExternalStatus[] = ["Realizado", "Cerrado"];
-export const REIMBURSEMENT_TRIGGER_STATUS: ExternalStatus = "Producto recepcionado y en preparacion";
+const ZONE_WORKFLOW_ORDER: Record<Zone, ExternalStatus[]> = {
+  "Interior / Gran Buenos Aires": [
+    "Informado",
+    "Aviso de envio",
+    "Producto recepcionado y en preparacion",
+    "Pedido Kingston",
+    "Pedido deposito y etiquetado",
+    "Liberar mercaderia",
+    "OV creada",
+    "Pedido guia",
+    "Producto enviado",
+    "Realizado",
+    "Vencido",
+    "Cerrado"
+  ],
+  "Capital / AMBA": [
+    "Informado",
+    "Producto recepcionado y en preparacion",
+    "Pedido Kingston",
+    "Pedido deposito y etiquetado",
+    "Liberar mercaderia",
+    "OV creada",
+    "Producto listo para retiro",
+    "Realizado",
+    "Vencido",
+    "Cerrado"
+  ]
+};
+
+const LEGACY_STATUS_MAP: Record<string, ExternalStatus> = {
+  "Pedido etiqueta": "Pedido deposito y etiquetado",
+  "Pedido deposito": "Pedido deposito y etiquetado",
+  "Pedido a Kingston": "Pedido Kingston",
+  "OV cargada": "OV creada"
+};
+
+const CLOSED_CASE_STATUSES: ExternalStatus[] = ["Realizado", "Vencido", "Cerrado"];
 
 function fallbackInitials(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -42,35 +94,43 @@ export function formatCount(value: number) {
   return numberFormatter.format(value);
 }
 
+export function normalizeStatus(status: string): ExternalStatus {
+  return LEGACY_STATUS_MAP[status] ?? (status as ExternalStatus);
+}
+
 export function getOwnerInitials(name: string, owners: OwnerDirectoryEntry[] = ownerDirectory) {
   return owners.find((entry) => entry.name === name)?.initials ?? fallbackInitials(name);
 }
 
-export function getOwnerTeam(name: string, owners: OwnerDirectoryEntry[] = ownerDirectory) {
+export function getOwnerRole(name: string, owners: OwnerDirectoryEntry[] = ownerDirectory) {
   if (name === "Sin asignar") {
-    return "Unassigned";
+    return "UNASSIGNED";
   }
 
-  return owners.find((entry) => entry.name === name)?.team ?? "Operations";
+  return owners.find((entry) => entry.name === name)?.team ?? "TECHNICAL_SERVICE";
 }
 
 export function getTeamLabel(team: string) {
   switch (team) {
-    case "Operations":
-      return "Operaciones";
-    case "Logistics":
-      return "Logistica";
-    case "Purchasing":
+    case "ADMIN":
+      return "Administrador";
+    case "SALES":
+      return "Ventas";
+    case "TECHNICAL_SERVICE":
+      return "Servicio tecnico";
+    case "PURCHASING":
       return "Compras";
-    case "Warehouse":
-      return "Deposito";
-    case "Management":
-      return "Gerencia";
-    case "Unassigned":
+    case "PAYMENTS":
+      return "Pagos";
+    case "UNASSIGNED":
       return "Sin asignar";
     default:
       return team;
   }
+}
+
+export function getRoleLabel(role: UserRole) {
+  return getTeamLabel(role);
 }
 
 export function getDeliveryModeLabel(mode: DeliveryMode) {
@@ -173,8 +233,10 @@ export function getEventKindLabel(kind: EventKind) {
 
 export function getWorkflowCategoryLabel(value: string) {
   switch (value) {
-    case "active":
-      return "Activo";
+    case "service":
+      return "Servicio";
+    case "purchasing":
+      return "Compras";
     case "delivery":
       return "Entrega";
     case "terminal":
@@ -205,22 +267,28 @@ export function getAuditActionLabel(action: string) {
       return "Adjunto cargado";
     case "case-attachment-removed":
       return "Adjunto eliminado";
-    case "case-reimbursement-completed":
-      return "Reintegro completado";
     case "case-replacement-sku-updated":
       return "SKU de reemplazo";
-    case "owner-created":
-      return "Alta de responsable";
-    case "owner-updated":
-      return "Edicion de responsable";
-    case "owner-deleted":
-      return "Eliminacion de responsable";
+    case "case-reimbursement-completed":
+      return "Reintegro completado";
     case "case-status-updated":
       return "Cambio de estado";
     case "case-owner-updated":
       return "Cambio de responsable";
-    case "session-changed":
-      return "Cambio de usuario activo";
+    case "case-deleted":
+      return "Caso eliminado";
+    case "user-created":
+      return "Alta de usuario";
+    case "user-updated":
+      return "Edicion de usuario";
+    case "user-deleted":
+      return "Usuario eliminado";
+    case "user-password-updated":
+      return "Clave actualizada";
+    case "session-login":
+      return "Inicio de sesion";
+    case "session-logout":
+      return "Cierre de sesion";
     case "case-viewed":
       return "Consulta de caso";
     case "report-downloaded":
@@ -230,7 +298,7 @@ export function getAuditActionLabel(action: string) {
   }
 }
 
-export function getCaseById(caseId: string, cases: KingstonCase[] = kingstonCases) {
+export function getCaseById(caseId: string, cases: KingstonCase[] = [...kingstonCases, ...archivedCasesSeed]) {
   return cases.find((entry) => entry.id === caseId);
 }
 
@@ -265,49 +333,57 @@ export function getSlaLabel(date: string) {
   return `Vence en ${days}d`;
 }
 
-export function getWorkflowState(status: ExternalStatus) {
-  return workflowStates.find((entry) => entry.status === status);
+export function isStatusAvailableForZone(status: ExternalStatus, zone: Zone) {
+  return workflowStates.some((entry) => entry.status === status && entry.zones.includes(zone));
 }
 
-export function getWorkflowOrder(status: ExternalStatus) {
-  return getWorkflowState(status)?.order ?? 0;
+export function getWorkflowState(status: ExternalStatus, zone?: Zone) {
+  return workflowStates.find((entry) => entry.status === status && (!zone || entry.zones.includes(zone)));
 }
 
-export function getInitialSubstatus(status: ExternalStatus) {
-  return getWorkflowState(status)?.substatuses[0] ?? status;
+export function getZoneWorkflowSteps(zone: Zone, options?: { includeTerminal?: boolean }) {
+  return workflowStates
+    .filter(
+      (entry) => entry.zones.includes(zone) && ((options?.includeTerminal ?? true) || entry.category !== "terminal")
+    )
+    .toSorted((left, right) => left.order - right.order);
+}
+
+export function getWorkflowOrder(status: ExternalStatus, zone: Zone) {
+  return ZONE_WORKFLOW_ORDER[zone].indexOf(status);
+}
+
+export function getInitialSubstatus(status: ExternalStatus, zone?: Zone) {
+  return getWorkflowState(status, zone)?.substatuses[0] ?? status;
 }
 
 export function getNextActionCopy(status: ExternalStatus) {
-  if (status === "Realizado" || status === "Cerrado") {
+  if (status === "Realizado" || status === "Vencido" || status === "Cerrado") {
     return "Caso fuera de la bandeja operativa. No requiere una proxima accion abierta.";
   }
 
   return getWorkflowState(status)?.description ?? "Definir proxima accion operativa.";
 }
 
-export function getWorkflowSteps(options?: { includeTerminal?: boolean }) {
-  return workflowStates.filter(
-    (entry) => (options?.includeTerminal ?? true) || entry.category !== "terminal"
-  );
+export function getAllowedStatusesForZone(zone: Zone, options?: { includeTerminal?: boolean }) {
+  return getZoneWorkflowSteps(zone, options).map((entry) => entry.status);
 }
 
 export function isReimbursementZone(zone: KingstonCase["zone"]) {
   return zone === "Interior / Gran Buenos Aires";
 }
 
-export function hasReachedReimbursementTrigger(status: ExternalStatus) {
-  return getWorkflowOrder(status) >= getWorkflowOrder(REIMBURSEMENT_TRIGGER_STATUS);
+export function hasReachedReimbursementTrigger(status: ExternalStatus, zone: Zone) {
+  return getWorkflowOrder(status, zone) >= getWorkflowOrder("Producto recepcionado y en preparacion", zone);
 }
 
 export function shouldTrackReimbursement(entry: KingstonCase) {
   return (
     isReimbursementZone(entry.zone) &&
-    (
-      hasReachedReimbursementTrigger(entry.externalStatus) ||
+    (hasReachedReimbursementTrigger(entry.externalStatus, entry.zone) ||
       entry.logistics.reimbursementState === "Pending" ||
       entry.logistics.reimbursementState === "Requested" ||
-      entry.logistics.reimbursementState === "Completed"
-    )
+      entry.logistics.reimbursementState === "Completed")
   );
 }
 
@@ -323,15 +399,24 @@ export function getOpenCases(cases: KingstonCase[] = kingstonCases) {
   return cases.filter((entry) => !isClosedCaseStatus(entry.externalStatus));
 }
 
-export function getClosedCases(cases: KingstonCase[] = kingstonCases) {
+export function getClosedCases(cases: KingstonCase[] = archivedCasesSeed) {
   return cases.filter((entry) => isClosedCaseStatus(entry.externalStatus));
 }
 
 export function getPendingReimbursements(cases: KingstonCase[] = kingstonCases) {
-  return cases.filter(
+  return cases.filter((entry) => shouldTrackReimbursement(entry) && entry.logistics.reimbursementState !== "Completed");
+}
+
+export function getPendingPurchasesCases(cases: KingstonCase[] = kingstonCases) {
+  return getOpenCases(cases).filter(
+    (entry) => entry.externalStatus === "Liberar mercaderia" || entry.externalStatus === "OV creada"
+  );
+}
+
+export function getPendingTechnicalCases(cases: KingstonCase[] = kingstonCases) {
+  return getOpenCases(cases).filter(
     (entry) =>
-      shouldTrackReimbursement(entry) &&
-      entry.logistics.reimbursementState !== "Completed"
+      entry.externalStatus === "Informado" || entry.externalStatus === "Pedido deposito y etiquetado"
   );
 }
 
@@ -352,9 +437,7 @@ export function getTaskBuckets(cases: KingstonCase[] = kingstonCases) {
   const now = getReferenceDate().getTime();
 
   return {
-    overdue: tasks.filter(
-      (task) => task.state !== "Completed" && new Date(task.dueAt).getTime() < now
-    ),
+    overdue: tasks.filter((task) => task.state !== "Completed" && new Date(task.dueAt).getTime() < now),
     dueSoon: tasks.filter((task) => {
       const dueAt = new Date(task.dueAt).getTime();
       return task.state !== "Completed" && dueAt >= now && dueAt - now <= 1000 * 60 * 60 * 24;
@@ -380,6 +463,7 @@ export function getDashboardSnapshot(
   ).map(([label, value]) => ({ label, value }));
 
   const byStatus = workflowStates
+    .filter((state) => state.category !== "terminal")
     .map((state) => ({
       status: state.status,
       count: openCases.filter((entry) => entry.externalStatus === state.status).length,
@@ -399,7 +483,7 @@ export function getDashboardSnapshot(
   ).length;
 
   if (unassignedCount > 0) {
-    ownerLoad.push({ owner: "Sin asignar", team: "Unassigned", count: unassignedCount });
+    ownerLoad.push({ owner: "Sin asignar", team: "UNASSIGNED", count: unassignedCount });
   }
 
   const averageAging = Math.round(
@@ -411,7 +495,7 @@ export function getDashboardSnapshot(
       (entry) =>
         getSlaTone(entry.slaDueAt) !== "neutral" ||
         entry.priority === "Critical" ||
-        entry.externalStatus === "Pedido a Kingston"
+        entry.externalStatus === "Pedido Kingston"
     )
     .sort((left, right) => new Date(left.slaDueAt).getTime() - new Date(right.slaDueAt).getTime())
     .slice(0, 5);
@@ -419,11 +503,11 @@ export function getDashboardSnapshot(
   return {
     headlineMetrics: [
       { label: "Casos abiertos", value: openCases.length, hint: "Bandeja operativa con estados activos" },
-      { label: "Casos cerrados", value: closedCases.length, hint: "Casos finalizados o cerrados administrativamente" },
+      { label: "Casos cerrados", value: closedCases.length, hint: "Realizados, vencidos o cerrados" },
       { label: "SLA comprometido", value: taskBuckets.overdue.length, hint: "Tareas o casos fuera de ventana" },
       {
-        label: "Pedido a Kingston",
-        value: openCases.filter((entry) => entry.externalStatus === "Pedido a Kingston").length,
+        label: "Pedido Kingston",
+        value: openCases.filter((entry) => entry.externalStatus === "Pedido Kingston").length,
         hint: "Casos esperando reposicion o arribo"
       }
     ],
@@ -473,8 +557,7 @@ export function getCasesIndex(
     const matchesStatus = !filters?.status || entry.externalStatus === filters.status;
     const matchesZone = !filters?.zone || entry.zone === filters.zone;
     const matchesOwner = !filters?.owner || entry.owner === filters.owner;
-    const matchesDelivery =
-      !filters?.delivery || entry.deliveryMode === (filters.delivery as DeliveryMode);
+    const matchesDelivery = !filters?.delivery || entry.deliveryMode === (filters.delivery as DeliveryMode);
 
     return matchesQuery && matchesStatus && matchesZone && matchesOwner && matchesDelivery;
   });
@@ -485,27 +568,24 @@ export function getSearchParamValue(value: string | string[] | undefined): strin
 }
 
 export function getStatusTone(status: ExternalStatus) {
-  if (status === "Pedido a Kingston") return "danger";
+  if (status === "Pedido Kingston") return "danger";
+  if (status === "Realizado") return "success";
+  if (status === "Vencido" || status === "Cerrado") return "warning";
   if (
+    status === "Pedido deposito y etiquetado" ||
+    status === "Liberar mercaderia" ||
+    status === "OV creada" ||
+    status === "Pedido guia" ||
     status === "Producto enviado" ||
-    status === "Producto listo para retiro" ||
-    status === "Pedido etiqueta" ||
-    status === "Pedido deposito"
+    status === "Producto listo para retiro"
   ) {
     return "accent";
   }
 
-  if (status === "Realizado") return "success";
-
-  if (status === "Cerrado") return "warning";
-
   return "neutral";
 }
 
-export function getReportsSnapshot(
-  cases: KingstonCase[] = kingstonCases,
-  owners: OwnerDirectoryEntry[] = ownerDirectory
-) {
+export function getReportsSnapshot(cases: KingstonCase[] = kingstonCases, owners: OwnerDirectoryEntry[] = ownerDirectory) {
   const byClient = Array.from(
     cases.reduce((map, entry) => {
       map.set(entry.clientName, (map.get(entry.clientName) ?? 0) + 1);
@@ -530,7 +610,11 @@ export function getReportsSnapshot(
   return {
     throughput: [
       { label: "Realizados", value: completedCases.length, hint: "Casos finalizados con entrega confirmada" },
-      { label: "Pedidos a Kingston", value: getOpenCases(cases).filter((entry) => entry.externalStatus === "Pedido a Kingston").length, hint: "Casos que dependen de reposicion o arribo" },
+      {
+        label: "Pedido Kingston",
+        value: getOpenCases(cases).filter((entry) => entry.externalStatus === "Pedido Kingston").length,
+        hint: "Casos que dependen de reposicion o arribo"
+      },
       { label: "Cerrados", value: closedCases.length, hint: "Casos derivados al archivo final" },
       {
         label: "Aging promedio",
@@ -549,4 +633,16 @@ export function buildCaseAddress(entry: KingstonCase) {
   }
 
   return `${entry.address}, ${entry.city}, ${entry.province}, Argentina`;
+}
+
+export function createEmptyPermissions() {
+  return getDefaultPermissionsForRole("SALES");
+}
+
+export function canAccessModule(permissions: ModulePermissions, moduleKey: ModulePermissionKey) {
+  return permissions[moduleKey]?.view ?? false;
+}
+
+export function canManageModule(permissions: ModulePermissions, moduleKey: ModulePermissionKey) {
+  return permissions[moduleKey]?.manage ?? false;
 }

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useKingestion } from "@/components/workspace/kingestion-provider";
 import { ModuleSubnav } from "@/components/workspace/module-subnav";
 import { SectionPanel } from "@/components/workspace/section-panel";
-import { workflowStates } from "@/lib/kingston/data";
+import { getAllowedStatusesForZone } from "@/lib/kingston/helpers";
 import type { CasePriority, DeliveryMode, KingstonCase, Zone } from "@/lib/kingston/types";
 
 type DraftAttachment = {
@@ -120,7 +120,7 @@ function inferAttachmentKind(file: File): DraftAttachment["kind"] {
 }
 
 async function getPreviewUrl(file: File) {
-  if (!file.type.startsWith("image/")) {
+  if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
     return undefined;
   }
 
@@ -134,10 +134,22 @@ async function getPreviewUrl(file: File) {
 
 export default function NewCasePage() {
   const router = useRouter();
-  const { activeOwners, activeOwner, createCase } = useKingestion();
+  const { activeOwners, activeOwner, createCase, canManageModule } = useKingestion();
   const [draft, setDraft] = useState<DraftCase>(() => getInitialDraft(activeOwner?.name));
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const canManageCases = canManageModule("open-cases");
+  const availableStatuses = getAllowedStatusesForZone(draft.zone);
+
+  if (!canManageCases) {
+    return (
+      <div className="workspace-page">
+        <SectionPanel title="Sin permisos" description="Tu usuario no tiene permiso para crear casos.">
+          <div className="workspace-empty">Pedi al administrador que revise tus permisos.</div>
+        </SectionPanel>
+      </div>
+    );
+  }
 
   const handleAttachmentChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
@@ -147,9 +159,9 @@ export default function NewCasePage() {
       return;
     }
 
-    const oversizedFile = files.find((file) => file.size > 4 * 1024 * 1024);
+    const oversizedFile = files.find((file) => file.size > 2 * 1024 * 1024);
     if (oversizedFile) {
-      setError(`El archivo ${oversizedFile.name} supera el limite de 4 MB.`);
+      setError(`El archivo ${oversizedFile.name} supera el limite de 2 MB.`);
       return;
     }
 
@@ -175,7 +187,7 @@ export default function NewCasePage() {
     }
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
 
@@ -207,7 +219,7 @@ export default function NewCasePage() {
     setIsSaving(true);
 
     try {
-      const caseId = createCase({
+      const caseId = await createCase({
         kingstonNumber: draft.kingstonNumber,
         clientName: draft.clientName,
         contactName: draft.contactName,
@@ -246,6 +258,7 @@ export default function NewCasePage() {
       });
 
       router.push(`/cases/${caseId}`);
+      router.refresh();
     } catch {
       setIsSaving(false);
       setError("No pude guardar el caso. Proba de nuevo y, si sigue fallando, lo reviso.");
@@ -369,9 +382,9 @@ export default function NewCasePage() {
                         }))
                       }
                     >
-                      {workflowStates.map((state) => (
-                        <option key={state.status} value={state.status}>
-                          {state.status}
+                      {availableStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
                         </option>
                       ))}
                     </select>
@@ -396,7 +409,19 @@ export default function NewCasePage() {
                     <select
                       className="workspace-select"
                       value={draft.zone}
-                      onChange={(event) => setDraft((current) => ({ ...current, zone: event.target.value as Zone }))}
+                      onChange={(event) =>
+                        setDraft((current) => {
+                          const nextZone = event.target.value as Zone;
+                          const nextStatuses = getAllowedStatusesForZone(nextZone);
+                          const nextStatus = nextStatuses.includes(current.status) ? current.status : nextStatuses[0];
+
+                          return {
+                            ...current,
+                            zone: nextZone,
+                            status: nextStatus
+                          };
+                        })
+                      }
                     >
                       <option value="Interior / Gran Buenos Aires">Interior / Gran Buenos Aires</option>
                       <option value="Capital / AMBA">Capital / AMBA</option>
@@ -617,13 +642,26 @@ export default function NewCasePage() {
                             </button>
                           </div>
                           {attachment.previewUrl ? (
-                            <div className="workspace-proof-preview mt-3">
-                              <img
-                                src={attachment.previewUrl}
-                                alt={`Adjunto ${attachment.name}`}
-                                className="workspace-proof-image"
-                              />
-                            </div>
+                            attachment.mimeType === "application/pdf" ? (
+                              <div className="mt-3">
+                                <a
+                                  className="workspace-link-button"
+                                  href={attachment.previewUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Abrir PDF
+                                </a>
+                              </div>
+                            ) : (
+                              <div className="workspace-proof-preview mt-3">
+                                <img
+                                  src={attachment.previewUrl}
+                                  alt={`Adjunto ${attachment.name}`}
+                                  className="workspace-proof-image"
+                                />
+                              </div>
+                            )
                           ) : null}
                         </article>
                       ))}

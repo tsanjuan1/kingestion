@@ -23,7 +23,16 @@ import {
 
 export function DashboardModule() {
   const searchParams = useSearchParams();
-  const { dashboardSnapshot, auditLog, activeOwners, openCases, closedCases, updateCaseStatus } = useKingestion();
+  const {
+    dashboardSnapshot,
+    auditLog,
+    activeOwners,
+    openCases,
+    closedCases,
+    updateCaseStatus,
+    canAccessModule,
+    canManageModule
+  } = useKingestion();
   const urgentTasks = [...dashboardSnapshot.taskBuckets.overdue, ...dashboardSnapshot.taskBuckets.dueSoon].slice(0, 4);
   const recentActivity = auditLog.slice(0, 6);
   const openCasesCount = Math.max(dashboardSnapshot.openCases.length, 1);
@@ -45,13 +54,23 @@ export function DashboardModule() {
     })
     .toSorted((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
 
+  if (!canAccessModule("summary")) {
+    return (
+      <div className="workspace-page">
+        <SectionPanel title="Sin permisos" description="Tu usuario no tiene acceso al modulo Resumen.">
+          <div className="workspace-empty">Pedi al administrador que revise tus permisos.</div>
+        </SectionPanel>
+      </div>
+    );
+  }
+
   return (
     <div className="workspace-page">
       <CollapsiblePanel
         kicker="Situacion operativa"
         title="Vista rapida de la operacion"
         description="Un pantallazo corto para detectar prioridades y pasar al modulo correcto sin ruido visual."
-        defaultOpen
+        defaultOpen={false}
         aside={
           <div className="workspace-inline-actions">
             <Link className="workspace-button-secondary" href="/cases">
@@ -199,6 +218,7 @@ export function DashboardModule() {
               <CaseTable
                 cases={searchResults}
                 onStatusChange={updateCaseStatus}
+                disableStatusChange={!canManageModule("open-cases")}
                 emptyLabel="No hay coincidencias con los filtros actuales."
               />
             </SectionPanel>

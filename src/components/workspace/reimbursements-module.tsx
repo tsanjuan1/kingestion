@@ -12,10 +12,20 @@ import {
 } from "@/lib/kingston/helpers";
 
 export function ReimbursementsModule() {
-  const { cases, canManageReimbursements, completeReimbursement, activeOwner } = useKingestion();
+  const { cases, canManageReimbursements, completeReimbursement, activeOwner, canAccessModule } = useKingestion();
   const pendingCases = getPendingReimbursements(cases).toSorted(
     (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
   );
+
+  if (!canAccessModule("reimbursements")) {
+    return (
+      <div className="workspace-page">
+        <SectionPanel title="Sin permisos" description="Tu usuario no tiene acceso al modulo Reintegros.">
+          <div className="workspace-empty">Pedi al administrador que revise tus permisos.</div>
+        </SectionPanel>
+      </div>
+    );
+  }
 
   return (
     <div className="workspace-page">
@@ -24,7 +34,7 @@ export function ReimbursementsModule() {
         description={
           canManageReimbursements
             ? "Podes revisar comprobantes y marcar el reintegro como completado."
-            : `Solo Compras o Gerencia pueden cerrar reintegros. Mientras no se complete, el caso sigue apareciendo en este modulo. Sesion actual: ${activeOwner?.name ?? "sin responsable activo"}.`
+            : `Solo Administracion, Compras o Pagos pueden cerrar reintegros. Mientras no se complete, el caso sigue apareciendo en este modulo. Sesion actual: ${activeOwner.name}.`
         }
       >
         {pendingCases.length === 0 ? (
@@ -101,11 +111,22 @@ export function ReimbursementsModule() {
                     <div className="workspace-kicker">Comprobante</div>
                     {proofAttachment?.previewUrl ? (
                       <div className="workspace-proof-preview">
-                        <img
-                          src={proofAttachment.previewUrl}
-                          alt={`Comprobante ${proofAttachment.name}`}
-                          className="workspace-proof-image"
-                        />
+                        {proofAttachment.mimeType === "application/pdf" ? (
+                          <a
+                            className="workspace-button-secondary"
+                            href={proofAttachment.previewUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Abrir PDF
+                          </a>
+                        ) : (
+                          <img
+                            src={proofAttachment.previewUrl}
+                            alt={`Comprobante ${proofAttachment.name}`}
+                            className="workspace-proof-image"
+                          />
+                        )}
                         <div className="workspace-case-meta">
                           {proofAttachment.name} / {formatDateTime(proofAttachment.createdAt)}
                         </div>

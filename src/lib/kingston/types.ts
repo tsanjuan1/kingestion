@@ -18,27 +18,32 @@ export type ExternalStatus =
   | "Informado"
   | "Aviso de envio"
   | "Producto recepcionado y en preparacion"
-  | "Pedido etiqueta"
-  | "Pedido deposito"
-  | "Pedido a Kingston"
+  | "Pedido deposito y etiquetado"
+  | "Pedido Kingston"
+  | "Liberar mercaderia"
+  | "OV creada"
+  | "Pedido guia"
   | "Producto enviado"
   | "Producto listo para retiro"
   | "Realizado"
+  | "Vencido"
   | "Cerrado";
 
-export type WorkflowCategory = "active" | "delivery" | "terminal";
+export type WorkflowCategory = "service" | "purchasing" | "delivery" | "terminal";
 
 export type WorkflowState = {
   status: ExternalStatus;
   category: WorkflowCategory;
   order: number;
   description: string;
+  zones: Zone[];
   substatuses: string[];
 };
 
 export type TransitionRule = {
   from: ExternalStatus;
   to: ExternalStatus;
+  zones: Zone[];
   requiredFields: string[];
   autoTasks: string[];
   note: string;
@@ -92,6 +97,8 @@ export type CaseEvent = {
   createdAt: string;
 };
 
+export type ReimbursementState = "Pending" | "Not applicable" | "Requested" | "Completed";
+
 export type CaseLogistics = {
   mode: DeliveryMode;
   address: string;
@@ -101,7 +108,7 @@ export type CaseLogistics = {
   dispatchDate: string | null;
   deliveredDate: string | null;
   shippingCost: string | null;
-  reimbursementState: "Pending" | "Not applicable" | "Requested" | "Completed";
+  reimbursementState: ReimbursementState;
 };
 
 export type CaseProcurement = {
@@ -154,16 +161,36 @@ export type KingstonCase = {
   events: CaseEvent[];
 };
 
+export type UserRole = "ADMIN" | "SALES" | "TECHNICAL_SERVICE" | "PURCHASING" | "PAYMENTS";
+
+export type ModulePermissionKey =
+  | "summary"
+  | "open-cases"
+  | "reimbursements"
+  | "pending-purchases"
+  | "pending-service"
+  | "closed-cases"
+  | "reports"
+  | "settings";
+
+export type ModulePermission = {
+  view: boolean;
+  manage: boolean;
+};
+
+export type ModulePermissions = Record<ModulePermissionKey, ModulePermission>;
+
 export type OwnerDirectoryEntry = {
   id: string;
   name: string;
-  team: "Operations" | "Logistics" | "Purchasing" | "Warehouse" | "Management";
+  team: UserRole;
   initials: string;
   email: string;
   active: boolean;
+  permissions: ModulePermissions;
 };
 
-export type InteractionEntityType = "case" | "owner" | "session" | "report";
+export type InteractionEntityType = "case" | "owner" | "session" | "report" | "user";
 
 export type UserInteractionLog = {
   id: string;
@@ -174,4 +201,9 @@ export type UserInteractionLog = {
   action: string;
   detail: string;
   createdAt: string;
+};
+
+export type WorkspaceDataState = {
+  cases: KingstonCase[];
+  auditLog: UserInteractionLog[];
 };

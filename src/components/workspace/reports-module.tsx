@@ -28,7 +28,7 @@ function getReportView(value: string | null): ReportView {
 export function ReportsModule() {
   const searchParams = useSearchParams();
   const view = getReportView(searchParams.get("view"));
-  const { reportsSnapshot, dashboardSnapshot, auditLog, recordReportDownload } = useKingestion();
+  const { reportsSnapshot, dashboardSnapshot, auditLog, recordReportDownload, canAccessModule } = useKingestion();
   const maxStatus = Math.max(...dashboardSnapshot.byStatus.map((entry) => entry.count), 1);
   const maxClient = Math.max(...reportsSnapshot.byClient.map((entry) => entry.value), 1);
   const maxSku = Math.max(...reportsSnapshot.bySku.map((entry) => entry.value), 1);
@@ -84,8 +84,18 @@ export function ReportsModule() {
 
   const handleDownload = () => {
     downloadPdfReport(reportPayload);
-    recordReportDownload(reportPayload.title);
+    void recordReportDownload(reportPayload.title);
   };
+
+  if (!canAccessModule("reports")) {
+    return (
+      <div className="workspace-page">
+        <SectionPanel title="Sin permisos" description="Tu usuario no tiene acceso al modulo Reportes.">
+          <div className="workspace-empty">Pedi al administrador que revise tus permisos.</div>
+        </SectionPanel>
+      </div>
+    );
+  }
 
   return (
     <div className="workspace-page">

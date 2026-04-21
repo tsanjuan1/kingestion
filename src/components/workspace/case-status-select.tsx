@@ -1,10 +1,11 @@
-import { workflowStates } from "@/lib/kingston/data";
-import { getStatusTone } from "@/lib/kingston/helpers";
-import type { ExternalStatus } from "@/lib/kingston/types";
+import { getAllowedStatusesForZone, getStatusTone } from "@/lib/kingston/helpers";
+import type { ExternalStatus, Zone } from "@/lib/kingston/types";
 
 type CaseStatusSelectProps = {
   value: ExternalStatus;
+  zone: Zone;
   onChange: (status: ExternalStatus) => void;
+  disabled?: boolean;
 };
 
 function getToneClass(status: ExternalStatus) {
@@ -22,17 +23,20 @@ function getToneClass(status: ExternalStatus) {
   }
 }
 
-export function CaseStatusSelect({ value, onChange }: CaseStatusSelectProps) {
+export function CaseStatusSelect({ value, zone, onChange, disabled = false }: CaseStatusSelectProps) {
+  const statusOptions = getAllowedStatusesForZone(zone);
+
   return (
     <select
       className={`workspace-status-select ${getToneClass(value)}`}
       value={value}
       onChange={(event) => onChange(event.target.value as ExternalStatus)}
       aria-label="Cambiar estado del caso"
+      disabled={disabled}
     >
-      {workflowStates.map((state) => (
-        <option key={state.status} value={state.status}>
-          {state.status}
+      {statusOptions.map((status) => (
+        <option key={status} value={status}>
+          {status}
         </option>
       ))}
     </select>
