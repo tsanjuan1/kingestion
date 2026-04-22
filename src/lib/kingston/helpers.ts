@@ -277,6 +277,10 @@ export function getAuditActionLabel(action: string) {
       return "Cambio de responsable";
     case "case-deleted":
       return "Caso eliminado";
+    case "case-archived":
+      return "Caso archivado";
+    case "case-restored":
+      return "Caso restaurado";
     case "user-created":
       return "Alta de usuario";
     case "user-updated":
@@ -395,16 +399,30 @@ export function isClosedCaseStatus(status: ExternalStatus) {
   return CLOSED_CASE_STATUSES.includes(status);
 }
 
+export function isArchivedCase(entry: KingstonCase) {
+  return Boolean(entry.archivedAt);
+}
+
+export function getArchivedCases(cases: KingstonCase[] = kingstonCases) {
+  return cases.filter((entry) => isArchivedCase(entry));
+}
+
+export function getVisibleCases(cases: KingstonCase[] = kingstonCases) {
+  return cases.filter((entry) => !isArchivedCase(entry));
+}
+
 export function getOpenCases(cases: KingstonCase[] = kingstonCases) {
-  return cases.filter((entry) => !isClosedCaseStatus(entry.externalStatus));
+  return getVisibleCases(cases).filter((entry) => !isClosedCaseStatus(entry.externalStatus));
 }
 
 export function getClosedCases(cases: KingstonCase[] = archivedCasesSeed) {
-  return cases.filter((entry) => isClosedCaseStatus(entry.externalStatus));
+  return getVisibleCases(cases).filter((entry) => isClosedCaseStatus(entry.externalStatus));
 }
 
 export function getPendingReimbursements(cases: KingstonCase[] = kingstonCases) {
-  return cases.filter((entry) => shouldTrackReimbursement(entry) && entry.logistics.reimbursementState !== "Completed");
+  return getVisibleCases(cases).filter(
+    (entry) => shouldTrackReimbursement(entry) && entry.logistics.reimbursementState !== "Completed"
+  );
 }
 
 export function getPendingPurchasesCases(cases: KingstonCase[] = kingstonCases) {
@@ -451,9 +469,10 @@ export function getDashboardSnapshot(
   cases: KingstonCase[] = kingstonCases,
   owners: OwnerDirectoryEntry[] = ownerDirectory
 ) {
-  const openCases = getOpenCases(cases);
-  const closedCases = getClosedCases(cases);
-  const taskBuckets = getTaskBuckets(cases);
+  const visibleCases = getVisibleCases(cases);
+  const openCases = getOpenCases(visibleCases);
+  const closedCases = getClosedCases(visibleCases);
+  const taskBuckets = getTaskBuckets(visibleCases);
 
   const byZone = Array.from(
     openCases.reduce((map, entry) => {
@@ -586,8 +605,9 @@ export function getStatusTone(status: ExternalStatus) {
 }
 
 export function getReportsSnapshot(cases: KingstonCase[] = kingstonCases, owners: OwnerDirectoryEntry[] = ownerDirectory) {
+  const visibleCases = getVisibleCases(cases);
   const byClient = Array.from(
-    cases.reduce((map, entry) => {
+    visibleCases.reduce((map, entry) => {
       map.set(entry.clientName, (map.get(entry.clientName) ?? 0) + 1);
       return map;
     }, new Map<string, number>())
@@ -596,7 +616,7 @@ export function getReportsSnapshot(cases: KingstonCase[] = kingstonCases, owners
     .sort((left, right) => right.value - left.value);
 
   const bySku = Array.from(
-    cases.reduce((map, entry) => {
+    visibleCases.reduce((map, entry) => {
       map.set(entry.sku, (map.get(entry.sku) ?? 0) + entry.quantity);
       return map;
     }, new Map<string, number>())
@@ -604,21 +624,21 @@ export function getReportsSnapshot(cases: KingstonCase[] = kingstonCases, owners
     .map(([label, value]) => ({ label, value }))
     .sort((left, right) => right.value - left.value);
 
-  const completedCases = cases.filter((entry) => entry.externalStatus === "Realizado");
-  const closedCases = getClosedCases(cases);
+  const completedCases = visibleCases.filter((entry) => entry.externalStatus === "Realizado");
+  const closedCases = getClosedCases(visibleCases);
 
   return {
     throughput: [
       { label: "Realizados", value: completedCases.length, hint: "Casos finalizados con entrega confirmada" },
       {
         label: "Pedido Kingston",
-        value: getOpenCases(cases).filter((entry) => entry.externalStatus === "Pedido Kingston").length,
+        value: getOpenCases(visibleCases).filter((entry) => entry.externalStatus === "Pedido Kingston").length,
         hint: "Casos que dependen de reposicion o arribo"
       },
       { label: "Cerrados", value: closedCases.length, hint: "Casos derivados al archivo final" },
       {
         label: "Aging promedio",
-        value: getDashboardSnapshot(cases, owners).averageAging,
+        value: getDashboardSnapshot(visibleCases, owners).averageAging,
         hint: "Dias promedio dentro de la bandeja operativa"
       }
     ],

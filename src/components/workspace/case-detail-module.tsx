@@ -101,13 +101,17 @@ export function CaseDetailModule() {
   const {
     findCaseById,
     activeOwners,
+    activeOwner,
     assignCaseOwner,
     updateCaseStatus,
     addCaseAttachment,
     removeCaseAttachment,
     updateReplacementSku,
+    archiveCase,
+    restoreCase,
     deleteCase,
     auditLog,
+    canArchiveCases,
     canDeleteCases,
     canAccessModule,
     canManageModule,
@@ -137,11 +141,13 @@ export function CaseDetailModule() {
     );
   }
 
+  const isArchived = Boolean(entry.archivedAt);
+
   const canSeeCase = isClosedCaseStatus(entry.externalStatus)
     ? canAccessModule("closed-cases")
     : canAccessModule("open-cases");
 
-  if (!canSeeCase) {
+  if (!canSeeCase || (isArchived && activeOwner.team !== "ADMIN")) {
     return (
       <div className="workspace-page">
         <SectionPanel title="Sin permisos" description="Tu usuario no tiene acceso a este caso.">
@@ -151,7 +157,7 @@ export function CaseDetailModule() {
     );
   }
 
-  const canManageCases = canManageModule("open-cases");
+  const canManageCases = canManageModule("open-cases") && !isArchived;
 
   const taskItems = entry.tasks.map((task) => ({
     ...task,
@@ -250,6 +256,38 @@ export function CaseDetailModule() {
     router.refresh();
   };
 
+  const handleArchiveCase = async () => {
+    const confirmed = window.confirm(
+      `Se va a archivar ${entry.internalNumber}. Va a salir de las bandejas operativas hasta que un administrador lo restaure. Continuar?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const archived = await archiveCase(entry.id);
+
+    if (!archived) {
+      setAttachmentError("No pude archivar el caso.");
+      return;
+    }
+
+    setAttachmentError(null);
+    setAttachmentSuccess("Caso archivado correctamente.");
+  };
+
+  const handleRestoreCase = async () => {
+    const restored = await restoreCase(entry.id);
+
+    if (!restored) {
+      setAttachmentError("No pude restaurar el caso archivado.");
+      return;
+    }
+
+    setAttachmentError(null);
+    setAttachmentSuccess("Caso restaurado correctamente.");
+  };
+
   return (
     <div className="workspace-page">
       <header className="workspace-page-header">
@@ -259,6 +297,17 @@ export function CaseDetailModule() {
           </div>
 
           <div className="workspace-inline-actions">
+            {canArchiveCases ? (
+              isArchived ? (
+                <button className="workspace-button" type="button" onClick={handleRestoreCase}>
+                  Restaurar caso
+                </button>
+              ) : (
+                <button className="workspace-button-secondary" type="button" onClick={handleArchiveCase}>
+                  Archivar caso
+                </button>
+              )
+            ) : null}
             {canDeleteCases ? (
               <button className="workspace-button-secondary" type="button" onClick={handleDeleteCase}>
                 Eliminar caso
@@ -270,6 +319,11 @@ export function CaseDetailModule() {
             <Link className="workspace-button-secondary" href="/closed-cases">
               Ver cerrados
             </Link>
+            {isArchived ? (
+              <Link className="workspace-button-secondary" href="/settings?view=archivados">
+                Ver archivados
+              </Link>
+            ) : null}
           </div>
         </div>
 
@@ -279,11 +333,19 @@ export function CaseDetailModule() {
           <span className="workspace-chip">{getPriorityLabel(entry.priority)}</span>
           <span className="workspace-chip">{getDeliveryModeLabel(entry.deliveryMode)}</span>
           <span className="workspace-chip">{entry.internalSubstatus}</span>
+          {isArchived ? <span className="workspace-chip workspace-chip-active">Archivado</span> : null}
         </div>
 
         <p className="workspace-subtitle">
           {entry.clientName} / {entry.productDescription}. Responsable actual: {entry.owner}. Proxima accion: {entry.nextAction}
         </p>
+
+        {isArchived ? (
+          <div className="workspace-empty">
+            Archivado por {entry.archivedBy ?? "Administrador"} el {entry.archivedAt ? formatDateTime(entry.archivedAt) : "-"}.
+            Mientras siga archivado, el caso no aparece en las bandejas operativas.
+          </div>
+        ) : null}
       </header>
 
       <ModuleSubnav

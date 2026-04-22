@@ -288,6 +288,8 @@ function normalizeCase(entry: KingstonCase): KingstonCase {
     externalStatus: normalizedStatus,
     address: baseAddress,
     replacementSku: entry.replacementSku ?? null,
+    archivedAt: entry.archivedAt ?? null,
+    archivedBy: entry.archivedBy ?? null,
     banking: entry.banking ?? clientDetails?.banking,
     nextAction: entry.nextAction || getNextActionCopy(normalizedStatus),
     internalSubstatus: entry.internalSubstatus || getInitialSubstatus(normalizedStatus, entry.zone),
@@ -337,6 +339,12 @@ function appendAuditLog(
     ...state,
     auditLog: [createAuditEntry(actor, payload), ...state.auditLog].slice(0, 500)
   };
+}
+
+function assertCaseIsMutable(targetCase: KingstonCase) {
+  if (targetCase.archivedAt) {
+    throw new WorkspaceHttpError("El caso esta archivado. Restauralo antes de volver a modificarlo.", 409);
+  }
 }
 
 function getNextInternalCaseNumber(cases: KingstonCase[]) {
@@ -835,6 +843,7 @@ function applyAddCaseAttachment(
   if (!targetCase) {
     throw new WorkspaceHttpError("No pude encontrar el caso solicitado.", 404);
   }
+  assertCaseIsMutable(targetCase);
 
   const now = new Date().toISOString();
   const nextCases = workspaceData.cases.map((entry): KingstonCase => {
@@ -905,6 +914,7 @@ function applyRemoveCaseAttachment(
   if (!targetCase || !targetAttachment) {
     throw new WorkspaceHttpError("No pude encontrar el adjunto solicitado.", 404);
   }
+  assertCaseIsMutable(targetCase);
 
   const now = new Date().toISOString();
   const nextCases = workspaceData.cases.map((entry): KingstonCase => {
@@ -967,6 +977,7 @@ function applyUpdateReplacementSku(
   if (!targetCase) {
     throw new WorkspaceHttpError("No pude encontrar el caso solicitado.", 404);
   }
+  assertCaseIsMutable(targetCase);
 
   const now = new Date().toISOString();
   const normalizedReplacementSku = replacementSku.trim() || null;
@@ -1022,6 +1033,7 @@ function applyCompleteReimbursement(workspaceData: WorkspaceDataState, currentUs
   if (!targetCase) {
     throw new WorkspaceHttpError("No pude encontrar el caso solicitado.", 404);
   }
+  assertCaseIsMutable(targetCase);
 
   const now = new Date().toISOString();
   const nextCases = workspaceData.cases.map((entry): KingstonCase => {
@@ -1075,6 +1087,7 @@ function applyAssignCaseOwner(
   if (!targetCase) {
     throw new WorkspaceHttpError("No pude encontrar el caso solicitado.", 404);
   }
+  assertCaseIsMutable(targetCase);
 
   if (targetCase.owner === ownerName) {
     return workspaceData;
@@ -1127,6 +1140,7 @@ function applyUpdateCaseStatus(
   if (!targetCase) {
     throw new WorkspaceHttpError("No pude encontrar el caso solicitado.", 404);
   }
+  assertCaseIsMutable(targetCase);
 
   if (targetCase.externalStatus === status) {
     return workspaceData;
@@ -1220,6 +1234,110 @@ function applyDeleteCase(workspaceData: WorkspaceDataState, currentUser: OwnerDi
       entityId: caseId,
       action: "case-deleted",
       detail: `Se elimino ${targetCase.internalNumber}.`
+    }
+  );
+}
+
+function applyArchiveCase(workspaceData: WorkspaceDataState, currentUser: OwnerDirectoryEntry, caseId: string) {
+  if (currentUser.team !== "ADMIN") {
+    throw new WorkspaceHttpError("Solo el administrador puede archivar casos.", 403);
+  }
+
+  const targetCase = workspaceData.cases.find((entry) => entry.id === caseId);
+  if (!targetCase) {
+    throw new WorkspaceHttpError("No pude encontrar el caso solicitado.", 404);
+  }
+
+  if (targetCase.archivedAt) {
+    return workspaceData;
+  }
+
+  const now = new Date().toISOString();
+  const nextCases = workspaceData.cases.map((entry): KingstonCase =>
+    entry.id === caseId
+      ? {
+          ...entry,
+          archivedAt: now,
+          archivedBy: currentUser.name,
+          updatedAt: now,
+          events: [
+            {
+              id: createId("event"),
+              kind: "comment",
+              title: "Caso archivado",
+              detail: "El administrador archivo el caso y lo retiro de las bandejas operativas.",
+              actor: currentUser.name,
+              createdAt: now
+            },
+            ...entry.events
+          ]
+        }
+      : entry
+  );
+
+  return appendAuditLog(
+    {
+      ...workspaceData,
+      cases: nextCases
+    },
+    currentUser,
+    {
+      entityType: "case",
+      entityId: caseId,
+      action: "case-archived",
+      detail: `Se archivo ${targetCase.internalNumber}.`
+    }
+  );
+}
+
+function applyRestoreCase(workspaceData: WorkspaceDataState, currentUser: OwnerDirectoryEntry, caseId: string) {
+  if (currentUser.team !== "ADMIN") {
+    throw new WorkspaceHttpError("Solo el administrador puede restaurar casos archivados.", 403);
+  }
+
+  const targetCase = workspaceData.cases.find((entry) => entry.id === caseId);
+  if (!targetCase) {
+    throw new WorkspaceHttpError("No pude encontrar el caso solicitado.", 404);
+  }
+
+  if (!targetCase.archivedAt) {
+    return workspaceData;
+  }
+
+  const now = new Date().toISOString();
+  const nextCases = workspaceData.cases.map((entry): KingstonCase =>
+    entry.id === caseId
+      ? {
+          ...entry,
+          archivedAt: null,
+          archivedBy: null,
+          updatedAt: now,
+          events: [
+            {
+              id: createId("event"),
+              kind: "comment",
+              title: "Caso restaurado",
+              detail: "El administrador restauro el caso y volvio a dejarlo visible en las bandejas operativas.",
+              actor: currentUser.name,
+              createdAt: now
+            },
+            ...entry.events
+          ]
+        }
+      : entry
+  );
+
+  return appendAuditLog(
+    {
+      ...workspaceData,
+      cases: nextCases
+    },
+    currentUser,
+    {
+      entityType: "case",
+      entityId: caseId,
+      action: "case-restored",
+      detail: `Se restauro ${targetCase.internalNumber}.`
     }
   );
 }
@@ -1433,6 +1551,8 @@ export type WorkspaceMutation =
   | { type: "deleteUser"; userId: string }
   | { type: "assignCaseOwner"; caseId: string; ownerName: string }
   | { type: "updateCaseStatus"; caseId: string; status: KingstonCase["externalStatus"] }
+  | { type: "archiveCase"; caseId: string }
+  | { type: "restoreCase"; caseId: string }
   | { type: "deleteCase"; caseId: string }
   | { type: "recordCaseView"; caseId: string }
   | { type: "recordReportDownload"; reportName: string }
@@ -1511,6 +1631,12 @@ export async function applyWorkspaceMutation(
       case "updateCaseStatus":
         assertModuleManage(currentUser, "open-cases");
         workspaceData = applyUpdateCaseStatus(workspaceData, currentUser, mutation.caseId, mutation.status);
+        break;
+      case "archiveCase":
+        workspaceData = applyArchiveCase(workspaceData, currentUser, mutation.caseId);
+        break;
+      case "restoreCase":
+        workspaceData = applyRestoreCase(workspaceData, currentUser, mutation.caseId);
         break;
       case "deleteCase":
         workspaceData = applyDeleteCase(workspaceData, currentUser, mutation.caseId);

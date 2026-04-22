@@ -159,6 +159,8 @@ export type KingstonCase = {
   comments: CaseComment[];
   attachments: CaseAttachment[];
   events: CaseEvent[];
+  archivedAt?: string | null;
+  archivedBy?: string | null;
 };
 
 export type UserRole = "ADMIN" | "SALES" | "TECHNICAL_SERVICE" | "PURCHASING" | "PAYMENTS";

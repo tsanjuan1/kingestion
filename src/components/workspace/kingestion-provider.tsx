@@ -3,7 +3,15 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import type { CaseAttachmentInput, CreateCaseInput, OwnerInput, WorkspaceSnapshot } from "@/lib/kingston/contracts";
-import { canAccessModule, canManageModule, getClosedCases, getDashboardSnapshot, getOpenCases, getReportsSnapshot } from "@/lib/kingston/helpers";
+import {
+  canAccessModule,
+  canManageModule,
+  getArchivedCases,
+  getClosedCases,
+  getDashboardSnapshot,
+  getOpenCases,
+  getReportsSnapshot
+} from "@/lib/kingston/helpers";
 import type { ExternalStatus, KingstonCase, ModulePermissionKey, OwnerDirectoryEntry, UserInteractionLog } from "@/lib/kingston/types";
 
 const THEME_STORAGE_KEY = "kingestion.theme.v1";
@@ -14,11 +22,13 @@ type KingestionContextValue = WorkspaceSnapshot & {
   activeOwner: OwnerDirectoryEntry;
   openCases: KingstonCase[];
   closedCases: KingstonCase[];
+  archivedCases: KingstonCase[];
   activeOwners: OwnerDirectoryEntry[];
   themeMode: ThemeMode;
   isMutating: boolean;
   canManageReimbursements: boolean;
   canDeleteCases: boolean;
+  canArchiveCases: boolean;
   dashboardSnapshot: ReturnType<typeof getDashboardSnapshot>;
   reportsSnapshot: ReturnType<typeof getReportsSnapshot>;
   findCaseById: (caseId: string) => KingstonCase | undefined;
@@ -33,6 +43,8 @@ type KingestionContextValue = WorkspaceSnapshot & {
   deleteOwner: (ownerId: string) => Promise<boolean>;
   assignCaseOwner: (caseId: string, ownerName: string) => Promise<boolean>;
   updateCaseStatus: (caseId: string, status: ExternalStatus) => Promise<boolean>;
+  archiveCase: (caseId: string) => Promise<boolean>;
+  restoreCase: (caseId: string) => Promise<boolean>;
   deleteCase: (caseId: string) => Promise<boolean>;
   recordCaseView: (caseId: string) => Promise<void>;
   recordReportDownload: (reportName: string) => Promise<void>;
@@ -130,6 +142,7 @@ export function KingestionProvider({
 
   const openCases = useMemo(() => getOpenCases(workspaceSnapshot.cases), [workspaceSnapshot.cases]);
   const closedCases = useMemo(() => getClosedCases(workspaceSnapshot.cases), [workspaceSnapshot.cases]);
+  const archivedCases = useMemo(() => getArchivedCases(workspaceSnapshot.cases), [workspaceSnapshot.cases]);
   const activeOwners = useMemo(
     () => workspaceSnapshot.owners.filter((owner) => owner.active),
     [workspaceSnapshot.owners]
@@ -152,6 +165,7 @@ export function KingestionProvider({
     [activeOwner]
   );
   const canDeleteCases = activeOwner.team === "ADMIN";
+  const canArchiveCases = activeOwner.team === "ADMIN";
 
   const findCaseById = (caseId: string) => workspaceSnapshot.cases.find((entry) => entry.id === caseId);
 
@@ -245,6 +259,24 @@ export function KingestionProvider({
     }
   };
 
+  const archiveCase = async (caseId: string) => {
+    try {
+      await runMutation({ type: "archiveCase", caseId });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const restoreCase = async (caseId: string) => {
+    try {
+      await runMutation({ type: "restoreCase", caseId });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const deleteCase = async (caseId: string) => {
     try {
       await runMutation({ type: "deleteCase", caseId });
@@ -276,11 +308,13 @@ export function KingestionProvider({
       activeOwner,
       openCases,
       closedCases,
+      archivedCases,
       activeOwners,
       themeMode,
       isMutating,
       canManageReimbursements,
       canDeleteCases,
+      canArchiveCases,
       dashboardSnapshot,
       reportsSnapshot,
       findCaseById,
@@ -295,6 +329,8 @@ export function KingestionProvider({
       deleteOwner,
       assignCaseOwner,
       updateCaseStatus,
+      archiveCase,
+      restoreCase,
       deleteCase,
       recordCaseView,
       recordReportDownload,
@@ -309,11 +345,13 @@ export function KingestionProvider({
       activeOwner,
       openCases,
       closedCases,
+      archivedCases,
       activeOwners,
       themeMode,
       isMutating,
       canManageReimbursements,
       canDeleteCases,
+      canArchiveCases,
       dashboardSnapshot,
       reportsSnapshot
     ]

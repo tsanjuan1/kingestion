@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import { modulePermissionKeys, transitionRules, workflowStates } from "@/lib/kingston/data";
@@ -16,7 +17,7 @@ import {
 } from "@/lib/kingston/helpers";
 import type { ModulePermissionKey, ModulePermissions, OwnerDirectoryEntry } from "@/lib/kingston/types";
 
-type SettingsView = "usuarios" | "asignaciones" | "auditoria" | "workflow";
+type SettingsView = "usuarios" | "asignaciones" | "auditoria" | "archivados" | "workflow";
 
 type OwnerFormState = {
   name: string;
@@ -40,6 +41,7 @@ function getView(value: string | null): SettingsView {
   switch (value) {
     case "asignaciones":
     case "auditoria":
+    case "archivados":
     case "workflow":
       return value;
     default:
@@ -77,13 +79,15 @@ export function SettingsModule() {
     owners,
     activeOwners,
     openCases,
+    archivedCases,
     auditLog,
     activeOwner,
     canManageModule,
     createOwner,
     updateOwner,
     deleteOwner,
-    assignCaseOwner
+    assignCaseOwner,
+    restoreCase
   } = useKingestion();
   const canManageSettings = canManageModule("settings");
   const [editingOwnerId, setEditingOwnerId] = useState<string | null>(null);
@@ -92,6 +96,10 @@ export function SettingsModule() {
   const sortedOwners = useMemo(
     () => [...owners].sort((left, right) => left.name.localeCompare(right.name, "es")),
     [owners]
+  );
+  const sortedArchivedCases = useMemo(
+    () => [...archivedCases].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()),
+    [archivedCases]
   );
 
   const resetForm = () => {
@@ -147,10 +155,10 @@ export function SettingsModule() {
     }));
   };
 
-  if (!canManageSettings && view === "usuarios") {
+  if (!canManageSettings && (view === "usuarios" || view === "archivados")) {
     return (
       <div className="workspace-page">
-        <SectionPanel title="Sin permisos" description="Solo el administrador puede gestionar usuarios y permisos.">
+        <SectionPanel title="Sin permisos" description="Solo el administrador puede gestionar usuarios, permisos y archivados.">
           <div className="workspace-empty">
             Sesion actual: {activeOwner.name}. Si necesitas acceso a esta vista, pediselo al administrador.
           </div>
@@ -161,14 +169,15 @@ export function SettingsModule() {
 
   return (
     <div className="workspace-page">
-      <ModuleSubnav
-        items={[
-          { href: "/settings?view=usuarios", label: "Usuarios", active: view === "usuarios" },
-          { href: "/settings?view=asignaciones", label: "Asignaciones", active: view === "asignaciones" },
-          { href: "/settings?view=auditoria", label: "Auditoria", active: view === "auditoria" },
-          { href: "/settings?view=workflow", label: "Workflow", active: view === "workflow" }
-        ]}
-      />
+        <ModuleSubnav
+          items={[
+            { href: "/settings?view=usuarios", label: "Usuarios", active: view === "usuarios" },
+            { href: "/settings?view=asignaciones", label: "Asignaciones", active: view === "asignaciones" },
+            { href: "/settings?view=auditoria", label: "Auditoria", active: view === "auditoria" },
+            { href: "/settings?view=archivados", label: "Archivados", active: view === "archivados" },
+            { href: "/settings?view=workflow", label: "Workflow", active: view === "workflow" }
+          ]}
+        />
 
       {view === "usuarios" ? (
         <div className="workspace-grid-2">
@@ -412,6 +421,64 @@ export function SettingsModule() {
                       <td>{entry.actorName}</td>
                       <td>{getAuditActionLabel(entry.action)}</td>
                       <td>{entry.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionPanel>
+      ) : null}
+
+      {view === "archivados" ? (
+        <SectionPanel
+          title="Casos archivados"
+          description="Solo el administrador puede archivar o restaurar estos casos. Mientras esten archivados, salen de las bandejas operativas."
+        >
+          {sortedArchivedCases.length === 0 ? (
+            <div className="workspace-empty">No hay casos archivados en este momento.</div>
+          ) : (
+            <div className="workspace-table-wrap">
+              <table className="workspace-table">
+                <thead>
+                  <tr>
+                    <th>Caso</th>
+                    <th>Cliente</th>
+                    <th>Estado</th>
+                    <th>Archivado por</th>
+                    <th>Fecha</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedArchivedCases.map((entry) => (
+                    <tr key={entry.id}>
+                      <td>
+                        <div className="font-medium text-white">{entry.internalNumber}</div>
+                        <div className="workspace-case-meta">{entry.kingstonNumber}</div>
+                      </td>
+                      <td>{entry.clientName}</td>
+                      <td>{entry.externalStatus}</td>
+                      <td>{entry.archivedBy ?? "Administrador"}</td>
+                      <td>{entry.archivedAt ? formatDateTime(entry.archivedAt) : "-"}</td>
+                      <td>
+                        <div className="workspace-inline-actions">
+                          <Link className="workspace-link-button" href={`/cases/${entry.id}`}>
+                            Ver caso
+                          </Link>
+                          <button
+                            className="workspace-link-button"
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Se va a restaurar ${entry.internalNumber}. Continuar?`)) {
+                                void restoreCase(entry.id);
+                              }
+                            }}
+                          >
+                            Restaurar
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
