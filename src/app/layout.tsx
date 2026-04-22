@@ -3,6 +3,8 @@ import { DM_Sans, Syne } from "next/font/google";
 
 import "@/app/globals.css";
 
+const brandMarkIcon = "/kingestion-mark.png?v=20260422";
+
 const syne = Syne({
   subsets: ["latin"],
   variable: "--font-display",
@@ -22,9 +24,9 @@ export const metadata: Metadata = {
   },
   description: "Gestion interna de casos Kingston para ANYX, con seguimiento operativo, tareas, historial y reportes.",
   icons: {
-    icon: "/kingestion-mark.png",
-    shortcut: "/kingestion-mark.png",
-    apple: "/kingestion-mark.png"
+    icon: brandMarkIcon,
+    shortcut: brandMarkIcon,
+    apple: brandMarkIcon
   }
 };
 

@@ -9,6 +9,8 @@ import { getOwnerInitials, getRoleLabel } from "@/lib/kingston/helpers";
 import type { ModulePermissionKey } from "@/lib/kingston/types";
 
 const SIDEBAR_STORAGE_KEY = "kingestion.sidebar.collapsed";
+const brandLogo = "/kingestion-logo.png?v=20260422";
+const brandMark = "/kingestion-mark.png?v=20260422";
 
 const navigationItems = [
   {
@@ -124,13 +126,13 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               >
                 {isSidebarCollapsed ? (
                   <img
-                    src="/kingestion-mark.png"
+                    src={brandMark}
                     alt="Kingestion"
                     className="workspace-brand-mini-logo"
                   />
                 ) : (
                   <img
-                    src="/kingestion-logo.png"
+                    src={brandLogo}
                     alt="Kingestion"
                     className="workspace-brand-logo"
                   />

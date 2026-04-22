@@ -8,6 +8,8 @@ type LoginPanelProps = {
   blocked: boolean;
 };
 
+const brandLogo = "/kingestion-logo.png?v=20260422";
+
 async function submitJson(url: string, payload: object) {
   const response = await fetch(url, {
     method: "POST",
@@ -74,7 +76,7 @@ export function LoginPanel({ needsBootstrap, blocked }: LoginPanelProps) {
     <main className="min-h-screen bg-[linear-gradient(180deg,#edf4fa_0%,#dfe9f7_100%)] px-4 py-8 text-[var(--text)]">
       <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-5xl gap-6 rounded-[1.6rem] border border-[var(--line)] bg-[var(--panel)] p-5 shadow-[0_24px_80px_rgba(15,23,42,0.08)] md:grid-cols-[1.05fr_0.95fr]">
         <section className="rounded-[1.2rem] border border-[var(--color-line-soft)] bg-[linear-gradient(180deg,#0d4f92_0%,#0a3a6d_100%)] p-6 text-white">
-          <img src="/kingestion-logo.png" alt="Kingestion" className="h-auto w-[16rem] max-w-full object-contain" />
+          <img src={brandLogo} alt="Kingestion" className="h-auto w-[16rem] max-w-full object-contain" />
           <h1 className="mt-8 font-[var(--font-display)] text-5xl leading-none tracking-[-0.08em] text-white">
             Gestion de casos Kingston
           </h1>
