@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { SectionPanel } from "@/components/workspace/section-panel";
 import { useKingestion } from "@/components/workspace/kingestion-provider";
+import { openAttachmentPreview } from "@/lib/kingston/attachment-viewer";
 import {
   formatDate,
   formatDateTime,
@@ -112,14 +113,13 @@ export function ReimbursementsModule() {
                     {proofAttachment?.previewUrl ? (
                       <div className="workspace-proof-preview">
                         {proofAttachment.mimeType === "application/pdf" ? (
-                          <a
+                          <button
                             className="workspace-button-secondary"
-                            href={proofAttachment.previewUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                            type="button"
+                            onClick={() => void openAttachmentPreview(proofAttachment.previewUrl!)}
                           >
                             Abrir PDF
-                          </a>
+                          </button>
                         ) : (
                           <img
                             src={proofAttachment.previewUrl}

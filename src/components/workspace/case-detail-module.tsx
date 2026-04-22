@@ -8,23 +8,19 @@ import { CaseStatusSelect } from "@/components/workspace/case-status-select";
 import { EventTimeline } from "@/components/workspace/event-timeline";
 import { ModuleSubnav } from "@/components/workspace/module-subnav";
 import { SectionPanel } from "@/components/workspace/section-panel";
-import { StatusPill } from "@/components/workspace/status-pill";
 import { TaskList } from "@/components/workspace/task-list";
 import { useKingestion } from "@/components/workspace/kingestion-provider";
+import { openAttachmentPreview } from "@/lib/kingston/attachment-viewer";
 import {
   buildCaseAddress,
-  formatDate,
   formatDateTime,
   getAttachmentKindLabel,
   getAvailabilityLabel,
-  getCaseAgingDays,
   getDeliveryModeLabel,
   getOriginLabel,
   getOwnerInitials,
   getOwnerRole,
-  getPriorityLabel,
   getReimbursementStateLabel,
-  getSlaLabel,
   getTeamLabel,
   isClosedCaseStatus
 } from "@/lib/kingston/helpers";
@@ -288,64 +284,14 @@ export function CaseDetailModule() {
     setAttachmentSuccess("Caso restaurado correctamente.");
   };
 
+  const handleOpenAttachment = async (previewUrl: string) => {
+    await openAttachmentPreview(previewUrl);
+  };
+
   return (
     <div className="workspace-page">
       <header className="workspace-page-header">
-        <div className="workspace-page-header-row">
-          <div>
-            <h1 className="workspace-title">{entry.internalNumber}</h1>
-          </div>
-
-          <div className="workspace-inline-actions">
-            {canArchiveCases ? (
-              isArchived ? (
-                <button className="workspace-button" type="button" onClick={handleRestoreCase}>
-                  Restaurar caso
-                </button>
-              ) : (
-                <button className="workspace-button-secondary" type="button" onClick={handleArchiveCase}>
-                  Archivar caso
-                </button>
-              )
-            ) : null}
-            {canDeleteCases ? (
-              <button className="workspace-button-secondary" type="button" onClick={handleDeleteCase}>
-                Eliminar caso
-              </button>
-            ) : null}
-            <Link className="workspace-button-secondary" href="/cases">
-              Volver a abiertos
-            </Link>
-            <Link className="workspace-button-secondary" href="/closed-cases">
-              Ver cerrados
-            </Link>
-            {isArchived ? (
-              <Link className="workspace-button-secondary" href="/settings?view=archivados">
-                Ver archivados
-              </Link>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="workspace-chip-row">
-          <StatusPill kind="status" value={entry.externalStatus} />
-          <StatusPill kind="sla" value={entry.slaDueAt} label={getSlaLabel(entry.slaDueAt)} />
-          <span className="workspace-chip">{getPriorityLabel(entry.priority)}</span>
-          <span className="workspace-chip">{getDeliveryModeLabel(entry.deliveryMode)}</span>
-          <span className="workspace-chip">{entry.internalSubstatus}</span>
-          {isArchived ? <span className="workspace-chip workspace-chip-active">Archivado</span> : null}
-        </div>
-
-        <p className="workspace-subtitle">
-          {entry.clientName} / {entry.productDescription}. Responsable actual: {entry.owner}. Proxima accion: {entry.nextAction}
-        </p>
-
-        {isArchived ? (
-          <div className="workspace-empty">
-            Archivado por {entry.archivedBy ?? "Administrador"} el {entry.archivedAt ? formatDateTime(entry.archivedAt) : "-"}.
-            Mientras siga archivado, el caso no aparece en las bandejas operativas.
-          </div>
-        ) : null}
+        <h1 className="workspace-title">{entry.internalNumber}</h1>
       </header>
 
       <ModuleSubnav
@@ -370,10 +316,76 @@ export function CaseDetailModule() {
       />
 
       {tab === "resumen" ? (
-        <>
-          <section className="workspace-grid-4">
-            <article className="workspace-panel space-y-3">
-              <p className="workspace-kicker">Responsable</p>
+        <div className="workspace-grid-2">
+          <SectionPanel title="Resumen operativo" description="Lo esencial del caso, sin ruido visual.">
+            <dl className="workspace-data-list">
+              <div className="workspace-data-item">
+                <dt>Estado actual</dt>
+                <dd>{entry.externalStatus}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Subestado</dt>
+                <dd>{entry.internalSubstatus}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Responsable</dt>
+                <dd>
+                  {entry.owner} / {getTeamLabel(getOwnerRole(entry.owner))}
+                </dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Ticket Kingston</dt>
+                <dd>
+                  {entry.kingstonNumber} / {getOriginLabel(entry.origin)}
+                </dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Ultimo movimiento</dt>
+                <dd>{formatDateTime(entry.updatedAt)}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Modalidad</dt>
+                <dd>{getDeliveryModeLabel(entry.deliveryMode)}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Cliente</dt>
+                <dd>{entry.clientName}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Direccion exacta</dt>
+                <dd>{buildCaseAddress(entry)}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Producto y cantidad</dt>
+                <dd>
+                  {entry.sku} / {entry.productDescription} / {entry.quantity} unidades
+                </dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Falla reportada</dt>
+                <dd>{entry.failureDescription}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Proxima accion</dt>
+                <dd>{entry.nextAction}</dd>
+              </div>
+              <div className="workspace-data-item">
+                <dt>Observaciones</dt>
+                <dd>{entry.observations}</dd>
+              </div>
+              {isArchived ? (
+                <div className="workspace-data-item">
+                  <dt>Archivado</dt>
+                  <dd>
+                    {entry.archivedBy ?? "Administrador"} / {entry.archivedAt ? formatDateTime(entry.archivedAt) : "-"}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+          </SectionPanel>
+
+          <SectionPanel title="Gestion del caso" description="Asignacion y acciones administrativas.">
+            <div className="workspace-inline-form">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/6 text-sm font-semibold text-white">
                   {getOwnerInitials(entry.owner)}
@@ -383,82 +395,56 @@ export function CaseDetailModule() {
                   <div className="text-sm text-white/58">{getTeamLabel(getOwnerRole(entry.owner))}</div>
                 </div>
               </div>
-            </article>
 
-            <article className="workspace-panel space-y-3">
-              <p className="workspace-kicker">Aging</p>
-              <div className="text-4xl font-[var(--font-display)] tracking-[-0.06em] text-white">{getCaseAgingDays(entry)}d</div>
-              <div className="text-sm text-white/58">Ingreso {formatDate(entry.openedAt)}</div>
-            </article>
+              <label className="workspace-label">
+                <span>Responsable actual</span>
+                <select
+                  className="workspace-select"
+                  value={entry.owner}
+                  onChange={(event) => assignCaseOwner(entry.id, event.target.value)}
+                  disabled={!canManageCases}
+                >
+                  {activeOwners.map((owner) => (
+                    <option key={owner.id} value={owner.name}>
+                      {owner.name}
+                    </option>
+                  ))}
+                  <option value="Sin asignar">Sin asignar</option>
+                </select>
+              </label>
 
-            <article className="workspace-panel space-y-3">
-              <p className="workspace-kicker">Ticket Kingston</p>
-              <div className="text-base font-semibold text-white">{entry.kingstonNumber}</div>
-              <div className="text-sm text-white/58">Origen {getOriginLabel(entry.origin)}</div>
-            </article>
+              {(attachmentError || attachmentSuccess) ? (
+                <div className="workspace-empty">{attachmentError ?? attachmentSuccess}</div>
+              ) : null}
 
-            <article className="workspace-panel space-y-3">
-              <p className="workspace-kicker">Ultimo movimiento</p>
-              <div className="text-base font-semibold text-white">{formatDateTime(entry.updatedAt)}</div>
-              <div className="text-sm text-white/58">{entry.internalSubstatus}</div>
-            </article>
-          </section>
-
-          <div className="workspace-grid-2">
-            <SectionPanel title="Resumen operativo" description="Lo esencial para entender rapido donde esta parado el caso.">
-              <dl className="workspace-data-list">
-                <div className="workspace-data-item">
-                  <dt>Cliente</dt>
-                  <dd>{entry.clientName}</dd>
+              {canArchiveCases || canDeleteCases ? (
+                <div className="workspace-inline-actions">
+                  {canArchiveCases ? (
+                    isArchived ? (
+                      <button className="workspace-button" type="button" onClick={handleRestoreCase}>
+                        Restaurar caso
+                      </button>
+                    ) : (
+                      <button className="workspace-button-secondary" type="button" onClick={handleArchiveCase}>
+                        Archivar caso
+                      </button>
+                    )
+                  ) : null}
+                  {canDeleteCases ? (
+                    <button className="workspace-button-secondary" type="button" onClick={handleDeleteCase}>
+                      Eliminar caso
+                    </button>
+                  ) : null}
+                  {isArchived ? (
+                    <Link className="workspace-button-secondary" href="/closed-cases?view=archivados">
+                      Ver archivados
+                    </Link>
+                  ) : null}
                 </div>
-                <div className="workspace-data-item">
-                  <dt>Direccion exacta</dt>
-                  <dd>{buildCaseAddress(entry)}</dd>
-                </div>
-                <div className="workspace-data-item">
-                  <dt>Producto y cantidad</dt>
-                  <dd>
-                    {entry.sku} / {entry.productDescription} / {entry.quantity} unidades
-                  </dd>
-                </div>
-                <div className="workspace-data-item">
-                  <dt>Falla reportada</dt>
-                  <dd>{entry.failureDescription}</dd>
-                </div>
-                <div className="workspace-data-item">
-                  <dt>Observaciones</dt>
-                  <dd>{entry.observations}</dd>
-                </div>
-              </dl>
-            </SectionPanel>
-
-            <SectionPanel title="Asignacion y siguiente paso" description="Cambio de responsable y control de la accion pendiente.">
-              <div className="workspace-inline-form">
-                <label className="workspace-label">
-                  <span>Responsable actual</span>
-                  <select
-                    className="workspace-select"
-                    value={entry.owner}
-                    onChange={(event) => assignCaseOwner(entry.id, event.target.value)}
-                    disabled={!canManageCases}
-                  >
-                    {activeOwners.map((owner) => (
-                      <option key={owner.id} value={owner.name}>
-                        {owner.name}
-                      </option>
-                    ))}
-                    <option value="Sin asignar">Sin asignar</option>
-                  </select>
-                </label>
-
-                <div className="workspace-empty">
-                  <strong className="block text-white">Proxima accion</strong>
-                  <span className="mt-2 block text-white/68">{entry.nextAction}</span>
-                </div>
-              </div>
-            </SectionPanel>
-          </div>
-        </>
+              ) : null}
+            </div>
+          </SectionPanel>
+        </div>
       ) : null}
 
       {tab === "cliente" ? (
@@ -690,24 +676,22 @@ export function CaseDetailModule() {
               </div>
 
               <div>
-                {latestProofAttachment?.previewUrl ? (
-                  <div className="workspace-proof-preview">
-                    {latestProofAttachment.mimeType === "application/pdf" ? (
-                      <a
-                        className="workspace-button-secondary"
-                        href={latestProofAttachment.previewUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Abrir PDF
-                      </a>
-                    ) : (
-                      <img
-                        src={latestProofAttachment.previewUrl}
-                        alt={`Comprobante ${latestProofAttachment.name}`}
-                        className="workspace-proof-image"
-                      />
-                    )}
+                    {latestProofAttachment?.previewUrl ? (
+                      <div className="workspace-proof-preview">
+                        <button
+                          className="workspace-button-secondary"
+                          type="button"
+                          onClick={() => void handleOpenAttachment(latestProofAttachment.previewUrl!)}
+                        >
+                          Abrir adjunto
+                        </button>
+                        {latestProofAttachment.mimeType === "application/pdf" ? null : (
+                          <img
+                            src={latestProofAttachment.previewUrl}
+                            alt={`Comprobante ${latestProofAttachment.name}`}
+                            className="workspace-proof-image"
+                          />
+                        )}
                     <div className="workspace-case-meta">
                       {latestProofAttachment.name} / {formatDateTime(latestProofAttachment.createdAt)}
                     </div>
@@ -763,14 +747,13 @@ export function CaseDetailModule() {
                         </div>
                         {attachment.previewUrl ? (
                           <div className="mt-3">
-                            <a
+                            <button
                               className="workspace-link-button"
-                              href={attachment.previewUrl}
-                              target="_blank"
-                              rel="noreferrer"
+                              type="button"
+                              onClick={() => void handleOpenAttachment(attachment.previewUrl!)}
                             >
                               Abrir adjunto
-                            </a>
+                            </button>
                           </div>
                         ) : null}
                         {attachment.previewUrl ? (

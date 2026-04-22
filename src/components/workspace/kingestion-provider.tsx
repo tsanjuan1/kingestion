@@ -43,6 +43,7 @@ type KingestionContextValue = WorkspaceSnapshot & {
   deleteOwner: (ownerId: string) => Promise<boolean>;
   assignCaseOwner: (caseId: string, ownerName: string) => Promise<boolean>;
   updateCaseStatus: (caseId: string, status: ExternalStatus) => Promise<boolean>;
+  completeQueueStep: (caseId: string) => Promise<boolean>;
   archiveCase: (caseId: string) => Promise<boolean>;
   restoreCase: (caseId: string) => Promise<boolean>;
   deleteCase: (caseId: string) => Promise<boolean>;
@@ -259,6 +260,15 @@ export function KingestionProvider({
     }
   };
 
+  const completeQueueStep = async (caseId: string) => {
+    try {
+      await runMutation({ type: "completeQueueStep", caseId });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const archiveCase = async (caseId: string) => {
     try {
       await runMutation({ type: "archiveCase", caseId });
@@ -329,6 +339,7 @@ export function KingestionProvider({
       deleteOwner,
       assignCaseOwner,
       updateCaseStatus,
+      completeQueueStep,
       archiveCase,
       restoreCase,
       deleteCase,

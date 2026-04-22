@@ -18,6 +18,7 @@ import {
   canAccessModule,
   canManageModule,
   getInitialSubstatus,
+  getNextQueueCompletionStatus,
   getNextActionCopy,
   hasReachedReimbursementTrigger,
   isReimbursementZone,
@@ -1213,6 +1214,37 @@ function applyUpdateCaseStatus(
   );
 }
 
+function applyCompleteQueueStep(workspaceData: WorkspaceDataState, currentUser: OwnerDirectoryEntry, caseId: string) {
+  const targetCase = workspaceData.cases.find((entry) => entry.id === caseId);
+  if (!targetCase) {
+    throw new WorkspaceHttpError("No pude encontrar el caso solicitado.", 404);
+  }
+  assertCaseIsMutable(targetCase);
+
+  const isPurchasingQueueStep =
+    targetCase.externalStatus === "Liberar mercaderia" || targetCase.externalStatus === "OV creada";
+  const isTechnicalQueueStep =
+    targetCase.externalStatus === "Informado" || targetCase.externalStatus === "Pedido deposito y etiquetado";
+
+  if (!isPurchasingQueueStep && !isTechnicalQueueStep) {
+    throw new WorkspaceHttpError("Este caso no tiene una accion pendiente de cierre sectorial.", 409);
+  }
+
+  if (
+    currentUser.team !== "ADMIN" &&
+    !canManageModule(currentUser.permissions, isPurchasingQueueStep ? "pending-purchases" : "pending-service")
+  ) {
+    throw new WorkspaceHttpError("No tenes permiso para completar esta cola sectorial.", 403);
+  }
+
+  const nextStatus = getNextQueueCompletionStatus(targetCase);
+  if (!nextStatus) {
+    throw new WorkspaceHttpError("No pude determinar la siguiente etapa para este caso.", 409);
+  }
+
+  return applyUpdateCaseStatus(workspaceData, currentUser, caseId, nextStatus);
+}
+
 function applyDeleteCase(workspaceData: WorkspaceDataState, currentUser: OwnerDirectoryEntry, caseId: string) {
   if (currentUser.team !== "ADMIN") {
     throw new WorkspaceHttpError("Solo el administrador puede eliminar casos.", 403);
@@ -1551,6 +1583,7 @@ export type WorkspaceMutation =
   | { type: "deleteUser"; userId: string }
   | { type: "assignCaseOwner"; caseId: string; ownerName: string }
   | { type: "updateCaseStatus"; caseId: string; status: KingstonCase["externalStatus"] }
+  | { type: "completeQueueStep"; caseId: string }
   | { type: "archiveCase"; caseId: string }
   | { type: "restoreCase"; caseId: string }
   | { type: "deleteCase"; caseId: string }
@@ -1631,6 +1664,9 @@ export async function applyWorkspaceMutation(
       case "updateCaseStatus":
         assertModuleManage(currentUser, "open-cases");
         workspaceData = applyUpdateCaseStatus(workspaceData, currentUser, mutation.caseId, mutation.status);
+        break;
+      case "completeQueueStep":
+        workspaceData = applyCompleteQueueStep(workspaceData, currentUser, mutation.caseId);
         break;
       case "archiveCase":
         workspaceData = applyArchiveCase(workspaceData, currentUser, mutation.caseId);

@@ -373,6 +373,37 @@ export function getAllowedStatusesForZone(zone: Zone, options?: { includeTermina
   return getZoneWorkflowSteps(zone, options).map((entry) => entry.status);
 }
 
+export function getNextWorkflowStatus(status: ExternalStatus, zone: Zone, options?: { includeTerminal?: boolean }) {
+  const orderedStatuses = ZONE_WORKFLOW_ORDER[zone];
+  const currentIndex = orderedStatuses.indexOf(status);
+
+  if (currentIndex < 0) {
+    return null;
+  }
+
+  for (let index = currentIndex + 1; index < orderedStatuses.length; index += 1) {
+    const nextStatus = orderedStatuses[index];
+    if ((options?.includeTerminal ?? true) || !isTerminalStatus(nextStatus)) {
+      return nextStatus;
+    }
+  }
+
+  return null;
+}
+
+export function getNextQueueCompletionStatus(entry: KingstonCase) {
+  if (
+    entry.externalStatus !== "Informado" &&
+    entry.externalStatus !== "Pedido deposito y etiquetado" &&
+    entry.externalStatus !== "Liberar mercaderia" &&
+    entry.externalStatus !== "OV creada"
+  ) {
+    return null;
+  }
+
+  return getNextWorkflowStatus(entry.externalStatus, entry.zone, { includeTerminal: false });
+}
+
 export function isReimbursementZone(zone: KingstonCase["zone"]) {
   return zone === "Interior / Gran Buenos Aires";
 }

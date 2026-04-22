@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useKingestion } from "@/components/workspace/kingestion-provider";
 import { ModuleSubnav } from "@/components/workspace/module-subnav";
 import { SectionPanel } from "@/components/workspace/section-panel";
+import { openAttachmentPreview } from "@/lib/kingston/attachment-viewer";
 import { getAllowedStatusesForZone } from "@/lib/kingston/helpers";
 import type { CasePriority, DeliveryMode, KingstonCase, Zone } from "@/lib/kingston/types";
 
@@ -642,18 +643,17 @@ export default function NewCasePage() {
                             </button>
                           </div>
                           {attachment.previewUrl ? (
-                            attachment.mimeType === "application/pdf" ? (
-                              <div className="mt-3">
-                                <a
-                                  className="workspace-link-button"
-                                  href={attachment.previewUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  Abrir PDF
-                                </a>
-                              </div>
-                            ) : (
+                              attachment.mimeType === "application/pdf" ? (
+                                <div className="mt-3">
+                                  <button
+                                    className="workspace-link-button"
+                                    type="button"
+                                    onClick={() => void openAttachmentPreview(attachment.previewUrl!)}
+                                  >
+                                    Abrir PDF
+                                  </button>
+                                </div>
+                              ) : (
                               <div className="workspace-proof-preview mt-3">
                                 <img
                                   src={attachment.previewUrl}
