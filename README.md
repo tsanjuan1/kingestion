@@ -1,21 +1,24 @@
 # Kingestion
 
-Landing inicial para `Kingestion`, pensada para desplegarse en Vercel y guardar leads comerciales en Supabase.
+Plataforma interna de ANYX para gestionar casos de RMA Kingston, con operación multiusuario, trazabilidad, workflow por zona, reportes y automatización lista para integrarse con `n8n`.
 
 ## Stack
 
 - Next.js 16 + React 19
 - Tailwind CSS v4
-- Supabase para persistencia de contactos
+- PostgreSQL vía `pg`
 - Vercel para despliegue
+- `n8n` para automatización externa y correo
 
-## Que trae esta primera version
+## Que trae hoy
 
-- hero full-bleed con identidad visual propia
-- secciones de propuesta, flujo y alcance
-- formulario de contacto con validacion y API route
-- migracion SQL para crear la tabla `contact_requests`
-- estructura lista para iterar y seguir publicando
+- login con usuarios, roles y permisos
+- gestión de casos abiertos, cerrados y archivados
+- colas de `Reintegros`, `Pendientes compras` y `Pendientes servicio tecnico`
+- historial y auditoría de acciones
+- adjuntos y detalle operativo por caso
+- API interna para automatización con `n8n`
+- pack de workflows listo para importar en [docs/n8n/README.md](./docs/n8n/README.md)
 
 ## Variables de entorno
 
@@ -23,9 +26,9 @@ Copiar `.env.example` a `.env.local` y completar:
 
 ```env
 NEXT_PUBLIC_SITE_URL="http://localhost:3000"
-NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
-NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
-SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+DATABASE_URL="postgres://user:password@host:5432/kingestion"
+KINGESTION_AUTOMATION_API_KEY="replace-with-a-long-random-string"
+KINGESTION_AUTOMATION_ACTOR_EMAIL="automation@kingestion.local"
 ```
 
 ## Instalacion local
@@ -33,21 +36,6 @@ SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
 ```bash
 npm install
 npm run dev
-```
-
-## Supabase
-
-1. Crear un proyecto nuevo en Supabase para `kingestion`.
-2. Copiar `Project URL`, `anon key` y `service_role key`.
-3. Completar `.env.local`.
-4. Aplicar la migracion SQL ubicada en `supabase/migrations/20260416173000_init.sql`.
-
-Si se usa CLI:
-
-```bash
-npx supabase login
-npx supabase link --project-ref <project-ref>
-npx supabase db push
 ```
 
 ## GitHub
@@ -70,3 +58,14 @@ Comandos utiles:
 vercel project add
 vercel --prod
 ```
+
+## n8n
+
+El pack de automatización vive en `docs/n8n` e incluye:
+
+- ingesta de mails de Kingston con IA
+- seguimiento automático por cambios de estado
+- copiloto operativo con IA
+- recordatorios diarios de SLA
+
+Ver guía completa en [docs/n8n/README.md](./docs/n8n/README.md).

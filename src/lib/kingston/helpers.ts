@@ -275,6 +275,12 @@ export function getAuditActionLabel(action: string) {
       return "Cambio de estado";
     case "case-owner-updated":
       return "Cambio de responsable";
+    case "case-comment-added":
+      return "Comentario agregado";
+    case "case-logistics-updated":
+      return "Logistica actualizada";
+    case "case-procurement-updated":
+      return "Abastecimiento actualizado";
     case "case-deleted":
       return "Caso eliminado";
     case "case-archived":

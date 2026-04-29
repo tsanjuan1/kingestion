@@ -1,0 +1,266 @@
+{
+  "name": "Kingestion 03 - Copiloto IA operativo",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook Copiloto",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -920,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "kingestion-copilot",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "webhookId": "kingestion-copilot"
+    },
+    {
+      "id": "2",
+      "name": "Buscar casos relacionados",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -660,
+        -80
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases?q=' + encodeURIComponent($json.body?.message ?? $json.message ?? '') + '&includeArchived=true' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-kingestion-api-key",
+              "value": "={{ $env.KINGESTION_AUTOMATION_API_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3",
+      "name": "Referencia workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -660,
+        80
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.KINGESTION_BASE_URL + '/api/integrations/n8n/reference' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-kingestion-api-key",
+              "value": "={{ $env.KINGESTION_AUTOMATION_API_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4",
+      "name": "Preparar contexto copiloto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const body = $('Webhook Copiloto').first().json.body ?? $('Webhook Copiloto').first().json;\nconst matches = $('Buscar casos relacionados').first().json.items ?? [];\nconst reference = $('Referencia workflow').first().json;\n\nreturn [{\n  json: {\n    message: body.message ?? '',\n    allowWrites: Boolean(body.allowWrites),\n    explicitCaseId: body.caseId ?? null,\n    caseMatches: matches.slice(0, 5),\n    reference\n  }\n}];"
+      }
+    },
+    {
+      "id": "5",
+      "name": "IA decide accion",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -120,
+        0
+      ],
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-5-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Sos el copiloto operativo de Kingestion.\n\nDispones de una API para:\n- buscar casos\n- leer un caso puntual\n- cambiar estado\n- agregar comentario\n- marcar reintegro completo\n- completar cola de compras o servicio tecnico\n\nIMPORTANTE:\n- si allowWrites es false, NUNCA propongas una accion que escriba\n- devolve SOLO JSON valido con este schema:\n{\n  \"action\": \"search\" | \"read_case\" | \"update_status\" | \"add_comment\" | \"complete_reimbursement\" | \"complete_queue\" | \"answer_only\",\n  \"caseId\": \"string | null\",\n  \"status\": \"string | null\",\n  \"comment\": \"string | null\",\n  \"reply\": \"string\"\n}\n\nMensaje del operador:\n{{ $json.message }}\n\nAllow writes:\n{{ $json.allowWrites }}\n\nCaseId explicito:\n{{ $json.explicitCaseId || 'ninguno' }}\n\nCasos encontrados:\n{{ JSON.stringify($json.caseMatches, null, 2) }}\n\nReferencia de workflow:\n{{ JSON.stringify($json.reference.workflowStates, null, 2) }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 1400
+        }
+      }
+    },
+    {
+      "id": "6",
+      "name": "Construir accion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        140,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const context = $('Preparar contexto copiloto').first().json;\nconst raw = $input.first().json.json ?? $input.first().json.output ?? $input.first().json.message?.content ?? $input.first().json;\nlet parsed = raw;\n\nif (typeof raw === 'string') {\n  const cleaned = raw.replace(/^```json|^```|```$/gm, '').trim();\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(match ? match[0] : cleaned);\n}\n\nconst firstMatch = context.caseMatches[0] ?? null;\nconst caseId = parsed.caseId || context.explicitCaseId || firstMatch?.id || null;\nconst action = parsed.action || 'answer_only';\n\nif (action === 'update_status' && caseId && context.allowWrites) {\n  return [{\n    json: {\n      reply: parsed.reply,\n      request: {\n        method: 'PATCH',\n        url: $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases/' + caseId,\n        body: { status: parsed.status }\n      }\n    }\n  }];\n}\n\nif (action === 'add_comment' && caseId && context.allowWrites) {\n  return [{\n    json: {\n      reply: parsed.reply,\n      request: {\n        method: 'PATCH',\n        url: $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases/' + caseId,\n        body: { comment: { body: parsed.comment || parsed.reply, internal: true } }\n      }\n    }\n  }];\n}\n\nif (action === 'complete_reimbursement' && caseId && context.allowWrites) {\n  return [{\n    json: {\n      reply: parsed.reply,\n      request: {\n        method: 'PATCH',\n        url: $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases/' + caseId,\n        body: { completeReimbursement: true }\n      }\n    }\n  }];\n}\n\nif (action === 'complete_queue' && caseId && context.allowWrites) {\n  return [{\n    json: {\n      reply: parsed.reply,\n      request: {\n        method: 'PATCH',\n        url: $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases/' + caseId,\n        body: { completeQueueStep: true }\n      }\n    }\n  }];\n}\n\nif (action === 'read_case' && caseId) {\n  return [{\n    json: {\n      reply: parsed.reply,\n      request: {\n        method: 'GET',\n        url: $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases/' + caseId\n      }\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    reply: parsed.reply,\n    request: {\n      method: 'GET',\n      url: $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases?q=' + encodeURIComponent(context.message) + '&includeArchived=true'\n    }\n  }\n}];"
+      }
+    },
+    {
+      "id": "7",
+      "name": "Ejecutar accion en Kingestion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "method": "={{ $json.request.method }}",
+        "url": "={{ $json.request.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-kingestion-api-key",
+              "value": "={{ $env.KINGESTION_AUTOMATION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.request.body ? JSON.stringify($json.request.body) : '{}' }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "8",
+      "name": "Respuesta final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const planned = $('Construir accion').first().json;\nconst result = $input.first().json;\n\nreturn [{\n  json: {\n    ok: true,\n    message: planned.reply,\n    result\n  }\n}];"
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Copiloto": {
+      "main": [
+        [
+          {
+            "node": "Buscar casos relacionados",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Referencia workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar casos relacionados": {
+      "main": [
+        [
+          {
+            "node": "Preparar contexto copiloto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Referencia workflow": {
+      "main": [
+        [
+          {
+            "node": "Preparar contexto copiloto",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Preparar contexto copiloto": {
+      "main": [
+        [
+          {
+            "node": "IA decide accion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IA decide accion": {
+      "main": [
+        [
+          {
+            "node": "Construir accion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir accion": {
+      "main": [
+        [
+          {
+            "node": "Ejecutar accion en Kingestion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ejecutar accion en Kingestion": {
+      "main": [
+        [
+          {
+            "node": "Respuesta final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Argentina/Buenos_Aires"
+  },
+  "versionId": "5137dbc6-44b2-4ced-9828-bb5a7fd293c4",
+  "id": "06b642aabe4e45de",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "kingestion-n8n-pack"
+  },
+  "tags": []
+}

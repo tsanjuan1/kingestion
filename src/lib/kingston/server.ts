@@ -29,6 +29,7 @@ import type {
   CaseAttachment,
   CaseEvent,
   ClientBankingDetails,
+  InteractionEntityType,
   KingstonCase,
   ModulePermissionKey,
   ModulePermissions,
@@ -55,6 +56,70 @@ type UserRow = {
   is_active: boolean;
   permissions_json: ModulePermissions | null;
   password_hash: string;
+};
+
+export type AutomationCaseFilters = {
+  q?: string;
+  internalNumber?: string;
+  kingstonNumber?: string;
+  clientName?: string;
+  status?: KingstonCase["externalStatus"];
+  zone?: KingstonCase["zone"];
+  includeArchived?: boolean;
+  reimbursementState?: KingstonCase["logistics"]["reimbursementState"];
+  queue?: "open" | "closed" | "archived" | "reimbursements" | "pending-purchases" | "pending-service";
+  updatedSince?: string;
+};
+
+export type AutomationCasePatch = {
+  owner?: string;
+  status?: KingstonCase["externalStatus"];
+  replacementSku?: string | null;
+  comment?: {
+    body: string;
+    internal?: boolean;
+  };
+  attachment?: CaseAttachmentInput;
+  logistics?: Partial<
+    Pick<
+      KingstonCase["logistics"],
+      | "mode"
+      | "address"
+      | "transporter"
+      | "guideNumber"
+      | "trackingUrl"
+      | "dispatchDate"
+      | "deliveredDate"
+      | "shippingCost"
+      | "reimbursementState"
+    >
+  >;
+  procurement?: Partial<
+    Pick<
+      KingstonCase["procurement"],
+      | "localStock"
+      | "wholesalerStock"
+      | "wholesalerName"
+      | "requiresKingstonOrder"
+      | "kingstonRequestedAt"
+      | "receivedFromUsaAt"
+      | "releasedByPurchasing"
+      | "releasedAt"
+      | "movedToRmaWarehouse"
+      | "movedToRmaWarehouseAt"
+    >
+  >;
+  completeReimbursement?: boolean;
+  completeQueueStep?: boolean;
+  archive?: boolean;
+  restore?: boolean;
+};
+
+export type AutomationActivityFilters = {
+  since?: string;
+  action?: string;
+  entityType?: InteractionEntityType;
+  limit?: number;
 };
 
 class WorkspaceHttpError extends Error {
@@ -316,6 +381,106 @@ function normalizeWorkspaceData(rawState: WorkspaceDataState | null | undefined)
     cases: Array.isArray(rawState?.cases) && rawState.cases.length > 0 ? rawState.cases.map(normalizeCase) : fallback.cases,
     auditLog: Array.isArray(rawState?.auditLog) ? rawState.auditLog : fallback.auditLog
   };
+}
+
+function createAutomationActor(): OwnerDirectoryEntry {
+  return {
+    id: "automation-n8n",
+    name: "Automatizacion n8n",
+    email: process.env.KINGESTION_AUTOMATION_ACTOR_EMAIL?.trim().toLowerCase() || "automation@kingestion.local",
+    team: "ADMIN",
+    active: true,
+    initials: "N8",
+    permissions: normalizePermissions("ADMIN")
+  };
+}
+
+function matchesAutomationCaseFilters(entry: KingstonCase, filters: AutomationCaseFilters) {
+  const normalizedSearch = filters.q?.trim().toLowerCase();
+  const normalizedInternal = filters.internalNumber?.trim().toLowerCase();
+  const normalizedKingston = filters.kingstonNumber?.trim().toLowerCase();
+  const normalizedClient = filters.clientName?.trim().toLowerCase();
+  const updatedSinceTimestamp = filters.updatedSince ? new Date(filters.updatedSince).getTime() : null;
+  const isArchived = Boolean(entry.archivedAt);
+  const isClosed =
+    entry.externalStatus === "Realizado" || entry.externalStatus === "Vencido" || entry.externalStatus === "Cerrado";
+  const isPendingReimbursement =
+    shouldTrackReimbursement(entry) && entry.logistics.reimbursementState !== "Completed" && !isArchived;
+  const isPendingPurchase =
+    !isArchived && (entry.externalStatus === "Liberar mercaderia" || entry.externalStatus === "OV creada");
+  const isPendingService =
+    !isArchived && (entry.externalStatus === "Informado" || entry.externalStatus === "Pedido deposito y etiquetado");
+
+  if (normalizedSearch) {
+    const searchableContent = [
+      entry.internalNumber,
+      entry.kingstonNumber,
+      entry.clientName,
+      entry.contactName,
+      entry.contactEmail,
+      entry.sku,
+      entry.replacementSku ?? "",
+      entry.owner,
+      entry.address,
+      entry.city,
+      entry.province
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    if (!searchableContent.includes(normalizedSearch)) {
+      return false;
+    }
+  }
+
+  if (normalizedInternal && !entry.internalNumber.toLowerCase().includes(normalizedInternal)) {
+    return false;
+  }
+
+  if (normalizedKingston && !entry.kingstonNumber.toLowerCase().includes(normalizedKingston)) {
+    return false;
+  }
+
+  if (normalizedClient && !entry.clientName.toLowerCase().includes(normalizedClient)) {
+    return false;
+  }
+
+  if (filters.status && entry.externalStatus !== filters.status) {
+    return false;
+  }
+
+  if (filters.zone && entry.zone !== filters.zone) {
+    return false;
+  }
+
+  if (filters.reimbursementState && entry.logistics.reimbursementState !== filters.reimbursementState) {
+    return false;
+  }
+
+  if (updatedSinceTimestamp && new Date(entry.updatedAt).getTime() < updatedSinceTimestamp) {
+    return false;
+  }
+
+  if (!filters.includeArchived && isArchived) {
+    return false;
+  }
+
+  switch (filters.queue) {
+    case "open":
+      return !isArchived && !isClosed;
+    case "closed":
+      return !isArchived && isClosed;
+    case "archived":
+      return isArchived;
+    case "reimbursements":
+      return isPendingReimbursement;
+    case "pending-purchases":
+      return isPendingPurchase;
+    case "pending-service":
+      return isPendingService;
+    default:
+      return true;
+  }
 }
 
 function createAuditEntry(
@@ -964,6 +1129,220 @@ function applyRemoveCaseAttachment(
       entityId: caseId,
       action: "case-attachment-removed",
       detail: `${targetCase.internalNumber} elimino el adjunto ${targetAttachment.name}.`
+    }
+  );
+}
+
+function applyAddCaseComment(
+  workspaceData: WorkspaceDataState,
+  currentUser: OwnerDirectoryEntry,
+  caseId: string,
+  input: {
+    body: string;
+    internal?: boolean;
+  }
+) {
+  const targetCase = workspaceData.cases.find((entry) => entry.id === caseId);
+  if (!targetCase) {
+    throw new WorkspaceHttpError("No pude encontrar el caso solicitado.", 404);
+  }
+  assertCaseIsMutable(targetCase);
+
+  const now = new Date().toISOString();
+  const nextBody = input.body.trim();
+  if (!nextBody) {
+    throw new WorkspaceHttpError("El comentario no puede estar vacio.", 400);
+  }
+
+  const nextCases = workspaceData.cases.map((entry): KingstonCase => {
+    if (entry.id !== caseId) {
+      return entry;
+    }
+
+    return {
+      ...entry,
+      updatedAt: now,
+      comments: [
+        {
+          id: createId("comment"),
+          author: currentUser.name,
+          body: nextBody,
+          internal: input.internal ?? true,
+          createdAt: now
+        },
+        ...entry.comments
+      ],
+      events: [
+        {
+          id: createId("event"),
+          kind: "comment",
+          title: input.internal === false ? "Comentario externo agregado" : "Comentario interno agregado",
+          detail: nextBody,
+          actor: currentUser.name,
+          createdAt: now
+        },
+        ...entry.events
+      ]
+    };
+  });
+
+  return appendAuditLog(
+    {
+      ...workspaceData,
+      cases: nextCases
+    },
+    currentUser,
+    {
+      entityType: "case",
+      entityId: caseId,
+      action: "case-comment-added",
+      detail: `${targetCase.internalNumber} recibio un comentario automatizado.`
+    }
+  );
+}
+
+function applyUpdateCaseLogistics(
+  workspaceData: WorkspaceDataState,
+  currentUser: OwnerDirectoryEntry,
+  caseId: string,
+  input: AutomationCasePatch["logistics"]
+) {
+  const targetCase = workspaceData.cases.find((entry) => entry.id === caseId);
+  if (!targetCase) {
+    throw new WorkspaceHttpError("No pude encontrar el caso solicitado.", 404);
+  }
+  assertCaseIsMutable(targetCase);
+
+  if (!input) {
+    return workspaceData;
+  }
+
+  const now = new Date().toISOString();
+  const nextCases = workspaceData.cases.map((entry): KingstonCase => {
+    if (entry.id !== caseId) {
+      return entry;
+    }
+
+    const nextLogistics = {
+      ...entry.logistics,
+      mode: input.mode ?? entry.logistics.mode,
+      address: input.address?.trim() || entry.logistics.address,
+      transporter:
+        input.transporter !== undefined ? input.transporter?.trim() || null : entry.logistics.transporter,
+      guideNumber: input.guideNumber !== undefined ? input.guideNumber?.trim() || null : entry.logistics.guideNumber,
+      trackingUrl: input.trackingUrl !== undefined ? input.trackingUrl?.trim() || null : entry.logistics.trackingUrl,
+      dispatchDate: input.dispatchDate !== undefined ? input.dispatchDate || null : entry.logistics.dispatchDate,
+      deliveredDate: input.deliveredDate !== undefined ? input.deliveredDate || null : entry.logistics.deliveredDate,
+      shippingCost:
+        input.shippingCost !== undefined ? input.shippingCost?.trim() || null : entry.logistics.shippingCost,
+      reimbursementState: input.reimbursementState ?? entry.logistics.reimbursementState
+    };
+
+    return normalizeCase({
+      ...entry,
+      deliveryMode: nextLogistics.mode,
+      logistics: nextLogistics,
+      updatedAt: now,
+      events: [
+        {
+          id: createId("event"),
+          kind: "logistics",
+          title: "Logistica actualizada",
+          detail: "La automatizacion actualizo datos logisticos del caso.",
+          actor: currentUser.name,
+          createdAt: now
+        },
+        ...entry.events
+      ]
+    });
+  });
+
+  return appendAuditLog(
+    {
+      ...workspaceData,
+      cases: nextCases
+    },
+    currentUser,
+    {
+      entityType: "case",
+      entityId: caseId,
+      action: "case-logistics-updated",
+      detail: `${targetCase.internalNumber} actualizo datos logisticos desde automatizacion.`
+    }
+  );
+}
+
+function applyUpdateCaseProcurement(
+  workspaceData: WorkspaceDataState,
+  currentUser: OwnerDirectoryEntry,
+  caseId: string,
+  input: AutomationCasePatch["procurement"]
+) {
+  const targetCase = workspaceData.cases.find((entry) => entry.id === caseId);
+  if (!targetCase) {
+    throw new WorkspaceHttpError("No pude encontrar el caso solicitado.", 404);
+  }
+  assertCaseIsMutable(targetCase);
+
+  if (!input) {
+    return workspaceData;
+  }
+
+  const now = new Date().toISOString();
+  const nextCases = workspaceData.cases.map((entry): KingstonCase => {
+    if (entry.id !== caseId) {
+      return entry;
+    }
+
+    return normalizeCase({
+      ...entry,
+      procurement: {
+        ...entry.procurement,
+        localStock: input.localStock ?? entry.procurement.localStock,
+        wholesalerStock: input.wholesalerStock ?? entry.procurement.wholesalerStock,
+        wholesalerName:
+          input.wholesalerName !== undefined ? input.wholesalerName?.trim() || null : entry.procurement.wholesalerName,
+        requiresKingstonOrder: input.requiresKingstonOrder ?? entry.procurement.requiresKingstonOrder,
+        kingstonRequestedAt:
+          input.kingstonRequestedAt !== undefined
+            ? input.kingstonRequestedAt || null
+            : entry.procurement.kingstonRequestedAt,
+        receivedFromUsaAt:
+          input.receivedFromUsaAt !== undefined ? input.receivedFromUsaAt || null : entry.procurement.receivedFromUsaAt,
+        releasedByPurchasing: input.releasedByPurchasing ?? entry.procurement.releasedByPurchasing,
+        releasedAt: input.releasedAt !== undefined ? input.releasedAt || null : entry.procurement.releasedAt,
+        movedToRmaWarehouse: input.movedToRmaWarehouse ?? entry.procurement.movedToRmaWarehouse,
+        movedToRmaWarehouseAt:
+          input.movedToRmaWarehouseAt !== undefined
+            ? input.movedToRmaWarehouseAt || null
+            : entry.procurement.movedToRmaWarehouseAt
+      },
+      updatedAt: now,
+      events: [
+        {
+          id: createId("event"),
+          kind: "procurement",
+          title: "Abastecimiento actualizado",
+          detail: "La automatizacion actualizo datos de compras y stock.",
+          actor: currentUser.name,
+          createdAt: now
+        },
+        ...entry.events
+      ]
+    });
+  });
+
+  return appendAuditLog(
+    {
+      ...workspaceData,
+      cases: nextCases
+    },
+    currentUser,
+    {
+      entityType: "case",
+      entityId: caseId,
+      action: "case-procurement-updated",
+      detail: `${targetCase.internalNumber} actualizo datos de abastecimiento desde automatizacion.`
     }
   );
 }
@@ -1717,6 +2096,133 @@ export async function applyWorkspaceMutation(
         currentUser: refreshedCurrentUser
       }
     };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function listAutomationCases(filters: AutomationCaseFilters = {}) {
+  await ensureKingestionSchema();
+  const workspaceData = await loadWorkspaceData();
+
+  return workspaceData.cases
+    .filter((entry) => matchesAutomationCaseFilters(entry, filters))
+    .toSorted((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+}
+
+export async function getAutomationCase(caseId: string) {
+  await ensureKingestionSchema();
+  const workspaceData = await loadWorkspaceData();
+
+  return workspaceData.cases.find((entry) => entry.id === caseId) ?? null;
+}
+
+export async function getAutomationActivity(filters: AutomationActivityFilters = {}) {
+  await ensureKingestionSchema();
+  const workspaceData = await loadWorkspaceData();
+  const limit = Math.min(Math.max(filters.limit ?? 100, 1), 500);
+  const sinceTimestamp = filters.since ? new Date(filters.since).getTime() : null;
+
+  return workspaceData.auditLog
+    .filter((entry) => {
+      if (filters.action && entry.action !== filters.action) {
+        return false;
+      }
+
+      if (filters.entityType && entry.entityType !== filters.entityType) {
+        return false;
+      }
+
+      if (sinceTimestamp && new Date(entry.createdAt).getTime() < sinceTimestamp) {
+        return false;
+      }
+
+      return true;
+    })
+    .slice(0, limit);
+}
+
+export async function createAutomationCase(input: CreateCaseInput) {
+  await ensureKingestionSchema();
+  const client = await pool.connect();
+  const automationActor = createAutomationActor();
+
+  try {
+    await client.query("begin");
+    const workspaceData = await loadWorkspaceData(client);
+    const result = applyCreateCase(workspaceData, automationActor, input);
+    await saveWorkspaceData(result.workspaceData, client);
+    await client.query("commit");
+
+    return result.workspaceData.cases.find((entry) => entry.id === result.createdCaseId) ?? null;
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function patchAutomationCase(caseId: string, patch: AutomationCasePatch) {
+  await ensureKingestionSchema();
+  const client = await pool.connect();
+  const automationActor = createAutomationActor();
+
+  try {
+    await client.query("begin");
+    let workspaceData = await loadWorkspaceData(client);
+
+    if (patch.procurement) {
+      workspaceData = applyUpdateCaseProcurement(workspaceData, automationActor, caseId, patch.procurement);
+    }
+
+    if (patch.logistics) {
+      workspaceData = applyUpdateCaseLogistics(workspaceData, automationActor, caseId, patch.logistics);
+    }
+
+    if (patch.owner && patch.owner.trim().length > 0) {
+      workspaceData = applyAssignCaseOwner(workspaceData, automationActor, caseId, patch.owner.trim());
+    }
+
+    if (patch.replacementSku !== undefined) {
+      workspaceData = applyUpdateReplacementSku(workspaceData, automationActor, caseId, patch.replacementSku ?? "");
+    }
+
+    if (patch.attachment) {
+      workspaceData = applyAddCaseAttachment(workspaceData, automationActor, caseId, patch.attachment);
+    }
+
+    if (patch.comment) {
+      workspaceData = applyAddCaseComment(workspaceData, automationActor, caseId, patch.comment);
+    }
+
+    if (patch.completeReimbursement) {
+      workspaceData = applyCompleteReimbursement(workspaceData, automationActor, caseId);
+    }
+
+    if (patch.completeQueueStep) {
+      workspaceData = applyCompleteQueueStep(workspaceData, automationActor, caseId);
+    }
+
+    if (patch.status) {
+      workspaceData = applyUpdateCaseStatus(workspaceData, automationActor, caseId, patch.status);
+    }
+
+    if (patch.archive) {
+      workspaceData = applyArchiveCase(workspaceData, automationActor, caseId);
+    }
+
+    if (patch.restore) {
+      workspaceData = applyRestoreCase(workspaceData, automationActor, caseId);
+    }
+
+    await saveWorkspaceData(workspaceData, client);
+    await client.query("commit");
+
+    return workspaceData.cases.find((entry) => entry.id === caseId) ?? null;
   } catch (error) {
     await client.query("rollback");
     throw error;

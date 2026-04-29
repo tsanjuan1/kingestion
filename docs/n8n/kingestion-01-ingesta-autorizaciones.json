@@ -1,0 +1,388 @@
+{
+  "name": "Kingestion 01 - Ingesta de autorizaciones Kingston",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Correo Kingston IMAP",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.1,
+      "position": [
+        -920,
+        -120
+      ],
+      "parameters": {
+        "postProcessAction": "nothing",
+        "downloadAttachments": true,
+        "options": {
+          "customEmailConfig": "=[\n  \"UNSEEN\",\n  [\"FROM\", \"rma@kingston.com\"]\n]"
+        }
+      }
+    },
+    {
+      "id": "2",
+      "name": "Prueba manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -920,
+        120
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "3",
+      "name": "Mock correo manual",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -700,
+        120
+      ],
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    from: 'rma@kingston.com',\n    subject: 'Autorizacion RMA KS-998877 - Micro Delta SA',\n    text: 'Kingston autoriza cambio de 12 modulos KF432C16BB/16 para Micro Delta SA. Contacto Nadia Ferreyra, email nadia.ferreyra@microdelta.com.ar, telefono +54 9 351 555-1200, direccion Av. Colon 4132 Piso 3, Cordoba Capital. Zona Interior / Gran Buenos Aires. Solicitar reintegro y envio del producto fallado.',\n    receivedAt: new Date().toISOString(),\n    attachments: []\n  }\n}];"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Normalizar correo Kingston",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        -20
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst json = item.json ?? {};\nconst attachments = [];\n\nfor (const [binaryKey, binaryFile] of Object.entries(item.binary ?? {})) {\n  const buffer = await this.helpers.getBinaryDataBuffer(0, binaryKey);\n  attachments.push({\n    name: binaryFile.fileName ?? binaryKey,\n    sizeLabel: binaryFile.fileSize ?? 'Adjunto',\n    mimeType: binaryFile.mimeType ?? 'application/octet-stream',\n    previewUrl: `data:${binaryFile.mimeType ?? 'application/octet-stream'};base64,${buffer.toString('base64')}`\n  });\n}\n\nreturn [{\n  json: {\n    from: json.from ?? json.headers?.from ?? '',\n    subject: json.subject ?? '',\n    text: json.text ?? json.plainText ?? json.html ?? '',\n    html: json.html ?? '',\n    receivedAt: json.receivedAt ?? json.date ?? new Date().toISOString(),\n    attachments\n  }\n}];"
+      }
+    },
+    {
+      "id": "5",
+      "name": "IA interpreta autorizacion",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -220,
+        -20
+      ],
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-5-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Sos un analista operativo de ANYX para RMA Kingston.\n\nInterpretá el siguiente correo y devolvé SOLO JSON valido con este schema:\n{\n  \"kingstonNumber\": \"string\",\n  \"clientName\": \"string\",\n  \"contactName\": \"string\",\n  \"contactEmail\": \"string\",\n  \"contactPhone\": \"string\",\n  \"zone\": \"Interior / Gran Buenos Aires\" | \"Capital / AMBA\",\n  \"deliveryMode\": \"Dispatch\" | \"Pickup\",\n  \"priority\": \"Low\" | \"Medium\" | \"High\" | \"Critical\",\n  \"address\": \"string\",\n  \"province\": \"string\",\n  \"city\": \"string\",\n  \"sku\": \"string\",\n  \"quantity\": number,\n  \"productDescription\": \"string\",\n  \"failureDescription\": \"string\",\n  \"nextAction\": \"string\",\n  \"observations\": \"string\",\n  \"origin\": \"Kingston email\",\n  \"externalStatus\": \"Informado\",\n  \"banking\": {\n    \"bankName\": \"\",\n    \"accountHolder\": \"\",\n    \"cuit\": \"\",\n    \"cbu\": \"\",\n    \"alias\": \"\",\n    \"accountNumber\": \"\"\n  }\n}\n\nSi falta un dato, completalo con la mejor inferencia operativa razonable y dejalo aclarado dentro de observations.\n\nAsunto:\n{{ $json.subject }}\n\nCorreo:\n{{ $json.text }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 1800
+        }
+      }
+    },
+    {
+      "id": "6",
+      "name": "Consolidar payload del caso",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        -20
+      ],
+      "parameters": {
+        "jsCode": "const emailItem = $('Normalizar correo Kingston').first().json;\nconst aiItem = $input.first().json;\nconst raw =\n  aiItem.json ??\n  aiItem.output ??\n  aiItem.response ??\n  aiItem.result ??\n  aiItem.message?.content ??\n  aiItem.text ??\n  aiItem.content ??\n  aiItem;\n\nlet parsed = raw;\nif (typeof raw === 'string') {\n  const cleaned = raw.replace(/^```json|^```|```$/gm, '').trim();\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(match ? match[0] : cleaned);\n}\n\nreturn [{\n  json: {\n    ...parsed,\n    origin: 'Kingston email',\n    externalStatus: 'Informado',\n    attachments: emailItem.attachments ?? [],\n    _emailContext: emailItem\n  }\n}];"
+      }
+    },
+    {
+      "id": "7",
+      "name": "Buscar caso por ticket Kingston",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        280,
+        -20
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases?kingstonNumber=' + encodeURIComponent($json.kingstonNumber) + '&includeArchived=true' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-kingestion-api-key",
+              "value": "={{ $env.KINGESTION_AUTOMATION_API_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8",
+      "name": "Existe caso previo",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        -20
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "larger"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9",
+      "name": "Crear caso en Kingestion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        760,
+        -160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-kingestion-api-key",
+              "value": "={{ $env.KINGESTION_AUTOMATION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Consolidar payload del caso').first().json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "10",
+      "name": "Actualizar caso existente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        760,
+        120
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases/' + $json.items[0].id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-kingestion-api-key",
+              "value": "={{ $env.KINGESTION_AUTOMATION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ comment: { body: 'n8n detecto un nuevo correo de autorizacion o seguimiento de Kingston y lo agrego al caso.', internal: true }, attachment: $('Consolidar payload del caso').first().json.attachments?.[0] }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "11",
+      "name": "Preparar correos iniciales",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        -20
+      ],
+      "parameters": {
+        "jsCode": "const caseItem = $('Consolidar payload del caso').first().json;\nconst wasExisting = $('Existe caso previo').first().json.count > 0;\n\nconst emails = [\n  {\n    toEmail: $env.KINGSTON_RMA_TO ?? 'rma@kingston.com',\n    subject: `ANYX | Caso ${caseItem.kingstonNumber} recibido`,\n    text: wasExisting\n      ? `Se actualizo en Kingestion el caso ${caseItem.kingstonNumber}. Queda trazado para seguimiento interno.`\n      : `Se recibio y dio de alta el caso ${caseItem.kingstonNumber} en Kingestion para ${caseItem.clientName}.`\n  }\n];\n\nif (caseItem.zone === 'Interior / Gran Buenos Aires') {\n  emails.push({\n    toEmail: caseItem.contactEmail,\n    subject: `ANYX | Instrucciones de envio para ${caseItem.kingstonNumber}`,\n    text: `Hola ${caseItem.contactName}. Recibimos la autorizacion de Kingston para el caso ${caseItem.kingstonNumber}. Por favor envia el producto fallado a ANYX y responde este correo con el comprobante y los datos bancarios para el reintegro.`\n  });\n} else {\n  emails.push({\n    toEmail: caseItem.contactEmail,\n    subject: `ANYX | Caso ${caseItem.kingstonNumber} en validacion`,\n    text: `Hola ${caseItem.contactName}. Recibimos la autorizacion de Kingston para el caso ${caseItem.kingstonNumber}. El equipo de ANYX ya esta validando stock y proximo paso. Te vamos a mantener informado desde Kingestion.`\n  });\n}\n\nreturn emails.map((email) => ({ json: email }));"
+      }
+    },
+    {
+      "id": "12",
+      "name": "Enviar emails iniciales",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1260,
+        -20
+      ],
+      "parameters": {
+        "fromEmail": "={{ $env.KINGESTION_FROM_EMAIL }}",
+        "toEmail": "={{ $json.toEmail }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Correo Kingston IMAP": {
+      "main": [
+        [
+          {
+            "node": "Normalizar correo Kingston",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prueba manual": {
+      "main": [
+        [
+          {
+            "node": "Mock correo manual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock correo manual": {
+      "main": [
+        [
+          {
+            "node": "Normalizar correo Kingston",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar correo Kingston": {
+      "main": [
+        [
+          {
+            "node": "IA interpreta autorizacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IA interpreta autorizacion": {
+      "main": [
+        [
+          {
+            "node": "Consolidar payload del caso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidar payload del caso": {
+      "main": [
+        [
+          {
+            "node": "Buscar caso por ticket Kingston",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar caso por ticket Kingston": {
+      "main": [
+        [
+          {
+            "node": "Existe caso previo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Existe caso previo": {
+      "main": [
+        [
+          {
+            "node": "Actualizar caso existente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Crear caso en Kingestion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear caso en Kingestion": {
+      "main": [
+        [
+          {
+            "node": "Preparar correos iniciales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar caso existente": {
+      "main": [
+        [
+          {
+            "node": "Preparar correos iniciales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar correos iniciales": {
+      "main": [
+        [
+          {
+            "node": "Enviar emails iniciales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Argentina/Buenos_Aires"
+  },
+  "versionId": "eb828349-e96f-4907-a9e6-4e36065d8112",
+  "id": "21f2e78d97434b76",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "kingestion-n8n-pack"
+  },
+  "tags": []
+}
