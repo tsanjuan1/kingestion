@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
-import { DM_Sans, Syne } from "next/font/google";
+import { Outfit, Sora } from "next/font/google";
 
 import "@/app/globals.css";
 
 const brandMarkIcon = "/kingestion-mark.png?v=20260422";
 
-const syne = Syne({
+const sora = Sora({
   subsets: ["latin"],
   variable: "--font-display",
   display: "swap"
 });
 
-const dmSans = DM_Sans({
+const outfit = Outfit({
   subsets: ["latin"],
   variable: "--font-body",
   display: "swap"
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${syne.variable} ${dmSans.variable}`} data-theme="light">
+    <html lang="es" className={`${sora.variable} ${outfit.variable}`} data-theme="light">
       <body>{children}</body>
     </html>
   );
