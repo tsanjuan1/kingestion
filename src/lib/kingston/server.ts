@@ -69,7 +69,7 @@ function getPositiveIntegerEnv(name: string, fallback: number) {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: getPositiveIntegerEnv("KINGESTION_DB_POOL_MAX", 2),
+  max: Math.min(getPositiveIntegerEnv("KINGESTION_DB_POOL_MAX", 1), 1),
   idleTimeoutMillis: 10_000,
   connectionTimeoutMillis: 5_000,
   allowExitOnIdle: true

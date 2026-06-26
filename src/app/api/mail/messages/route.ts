@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? "50"), 1), 100);
-    const shouldSyncAutomation = url.searchParams.get("syncAutomation") !== "false";
+    const shouldSyncAutomation = url.searchParams.get("syncAutomation") === "true";
     let automationError: string | null = null;
 
     if (shouldSyncAutomation) {

@@ -28,7 +28,7 @@ Copiar `.env.example` a `.env.local` y completar:
 ```env
 NEXT_PUBLIC_SITE_URL="http://localhost:3000"
 DATABASE_URL="postgres://user:password@host:5432/kingestion"
-KINGESTION_DB_POOL_MAX="2"
+KINGESTION_DB_POOL_MAX="1"
 KINGESTION_DB_RUNTIME_ROLE="kingestion_app"
 KINGESTION_AUTOMATION_API_KEY="replace-with-a-long-random-string"
 KINGESTION_AUTOMATION_EXTRA_KEYS=""

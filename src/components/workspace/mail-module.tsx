@@ -40,7 +40,7 @@ type MailListResponse = {
   automationError?: string | null;
 };
 
-const MAIL_REFRESH_INTERVAL_MS = 15000;
+const MAIL_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
 function formatDate(value: string | null) {
   if (!value) return "Sin fecha";
@@ -57,6 +57,11 @@ function formatSize(value: number | null) {
   if (!value) return "";
   if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatRefreshInterval(value: number) {
+  const minutes = Math.max(1, Math.round(value / 60_000));
+  return `${minutes} min`;
 }
 
 function getInitials(name: string) {
@@ -345,7 +350,7 @@ export function MailModule() {
           <div className="workspace-mail-folder-note">
             Carpeta: <strong>{folder}</strong>
             <span>
-              Actualizacion automatica cada {MAIL_REFRESH_INTERVAL_MS / 1000}s.
+              Actualizacion automatica cada {formatRefreshInterval(MAIL_REFRESH_INTERVAL_MS)}.
               {lastUpdatedAt ? ` Ultima: ${formatDate(lastUpdatedAt)}.` : ""}
             </span>
           </div>
