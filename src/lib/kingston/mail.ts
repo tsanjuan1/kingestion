@@ -277,7 +277,21 @@ async function getMicrosoftGraphAccessToken(config = getMicrosoftGraphConfig()) 
   });
 
   if (!response.ok) {
-    throw new Error(`Microsoft no entrego token OAuth (${response.status}).`);
+    const errorText = await response.text();
+    let microsoftError = errorText.trim();
+
+    try {
+      const parsed = JSON.parse(errorText) as { error?: string; error_description?: string };
+      microsoftError = [parsed.error, parsed.error_description].filter(Boolean).join(": ");
+    } catch {
+      // Microsoft puede responder texto plano en algunos errores de proxy/red.
+    }
+
+    throw new Error(
+      `Microsoft no entrego token OAuth (${response.status})${
+        microsoftError ? `: ${microsoftError}` : "."
+      }`
+    );
   }
 
   const payload = (await response.json()) as { access_token?: string; expires_in?: number };
