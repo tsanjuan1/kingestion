@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 220" role="img" aria-labelledby="kingestionLogoTitle kingestionLogoDesc">
+  <title id="kingestionLogoTitle">Kingestion</title>
+  <desc id="kingestionLogoDesc">Logo de Kingestion RMA Gestion de Casos</desc>
+  <g transform="translate(18 10)">
+    <g transform="scale(1.8)">
+      <path d="M8 4h42v42H8z" fill="#cc0f1e"/>
+      <path d="M50 12c12 5 15 16 11 28-2 5-6 8-11 8V12z" fill="#cc0f1e"/>
+      <path d="M8 30l10 16H8z" fill="#8b0000" fill-opacity=".7"/>
+      <path d="M32 19l18 4" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="2.4"/>
+      <path d="M32 28l18 5" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="1.6"/>
+      <path d="M48 38l13 3" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="1.4"/>
+      <path d="M22 46h22v10H22z" fill="#cc0f1e"/>
+      <path d="M22 46h14l-6 10H22z" fill="#8b0000" fill-opacity=".6"/>
+      <path d="M6 56h48l8 24-12 25-16-12-16 12L6 80z" fill="#cc0f1e"/>
+      <path d="M6 56h12l-6 24H6z" fill="#8b0000" fill-opacity=".6"/>
+      <path d="M34 56v24" fill="none" stroke="#8b0000" stroke-opacity=".5" stroke-width="1.5"/>
+    </g>
+  </g>
+  <g fill="#111111">
+    <text
+     x="175"
+      y="102"
+      font-family="'Playfair Display', Georgia, 'Times New Roman', serif"
+      font-size="108"
+      font-weight="900"
+      letter-spacing="-3"
+      paint-order="stroke fill"
+      stroke="#ffffff"
+      stroke-opacity=".88"
+      stroke-width="6"
+      stroke-linejoin="round"
+    >Kingestion</text>
+    <text
+      x="180"
+      y="150"
+      font-family="Arial, Helvetica, sans-serif"
+      font-size="26"
+      font-weight="400"
+      letter-spacing="11"
+      paint-order="stroke fill"
+      stroke="#ffffff"
+      stroke-opacity=".78"
+      stroke-width="2.4"
+      stroke-linejoin="round"
+    >RMA - GESTION DE CASOS</text>
+  </g>
+</svg>

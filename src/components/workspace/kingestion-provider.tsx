@@ -2,19 +2,32 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-import type { CaseAttachmentInput, CreateCaseInput, OwnerInput, WorkspaceSnapshot } from "@/lib/kingston/contracts";
+import type {
+  AutomationTriggerResult,
+  CaseAttachmentInput,
+  CreateCaseInput,
+  OwnerInput,
+  RemoteControlResult,
+  RemoteControlSource,
+  WorkspaceSnapshot
+} from "@/lib/kingston/contracts";
 import {
   canAccessModule,
   canManageModule,
   getArchivedCases,
   getClosedCases,
   getDashboardSnapshot,
+  getInitialSubstatus,
+  getNextActionCopy,
   getOpenCases,
-  getReportsSnapshot
+  getReportsSnapshot,
+  hasReachedReimbursementTrigger,
+  isReimbursementZone
 } from "@/lib/kingston/helpers";
 import type { ExternalStatus, KingstonCase, ModulePermissionKey, OwnerDirectoryEntry, UserInteractionLog } from "@/lib/kingston/types";
 
 const THEME_STORAGE_KEY = "kingestion.theme.v1";
+const AUTOMATION_HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000;
 
 export type ThemeMode = "light" | "dark";
 
@@ -37,18 +50,24 @@ type KingestionContextValue = WorkspaceSnapshot & {
   addCaseAttachment: (caseId: string, input: CaseAttachmentInput) => Promise<boolean>;
   removeCaseAttachment: (caseId: string, attachmentId: string) => Promise<boolean>;
   updateReplacementSku: (caseId: string, replacementSku: string) => Promise<boolean>;
+  markReimbursementInProcess: (caseId: string) => Promise<boolean>;
   completeReimbursement: (caseId: string) => Promise<boolean>;
+  requestReimbursementMissingData: (caseId: string) => Promise<boolean>;
   createOwner: (input: OwnerInput) => Promise<boolean>;
   updateOwner: (ownerId: string, input: OwnerInput) => Promise<boolean>;
   deleteOwner: (ownerId: string) => Promise<boolean>;
   assignCaseOwner: (caseId: string, ownerName: string) => Promise<boolean>;
   updateCaseStatus: (caseId: string, status: ExternalStatus) => Promise<boolean>;
-  completeQueueStep: (caseId: string) => Promise<boolean>;
+  completeQueueStep: (
+    caseId: string,
+    options?: { nextStatus?: ExternalStatus; guideNumber?: string }
+  ) => Promise<boolean>;
   archiveCase: (caseId: string) => Promise<boolean>;
   restoreCase: (caseId: string) => Promise<boolean>;
   deleteCase: (caseId: string) => Promise<boolean>;
   recordCaseView: (caseId: string) => Promise<void>;
   recordReportDownload: (reportName: string) => Promise<void>;
+  runRemoteAction: (source?: RemoteControlSource) => Promise<RemoteControlResult>;
   canAccessModule: (moduleKey: ModulePermissionKey) => boolean;
   canManageModule: (moduleKey: ModulePermissionKey) => boolean;
   refreshWorkspace: () => Promise<void>;
@@ -61,6 +80,10 @@ type MutationResponse = {
   createdCaseId?: string;
 };
 
+type OptimisticMutationOptions = {
+  optimisticUpdate?: (snapshot: WorkspaceSnapshot) => WorkspaceSnapshot;
+};
+
 async function parseErrorMessage(response: Response) {
   try {
     const payload = (await response.json()) as { message?: string };
@@ -68,6 +91,68 @@ async function parseErrorMessage(response: Response) {
   } catch {
     return "No pude completar la accion.";
   }
+}
+
+function automationChangedWorkspace(result: Partial<AutomationTriggerResult> | null) {
+  if (!result || result.paused) return false;
+
+  return [
+    result.processedMessages,
+    result.createdCases,
+    result.updatedCases,
+    result.sentEmails,
+    result.queuedEmails,
+    result.reviewMessages
+  ].some((value) => typeof value === "number" && value > 0);
+}
+
+function updateSnapshotCase(
+  snapshot: WorkspaceSnapshot,
+  caseId: string,
+  updater: (entry: KingstonCase) => KingstonCase
+): WorkspaceSnapshot {
+  return {
+    ...snapshot,
+    cases: snapshot.cases.map((entry) => (entry.id === caseId ? updater(entry) : entry))
+  };
+}
+
+function buildOptimisticStatusUpdate(
+  caseId: string,
+  status: ExternalStatus,
+  options: { guideNumber?: string } = {}
+) {
+  return (snapshot: WorkspaceSnapshot) =>
+    updateSnapshotCase(snapshot, caseId, (entry) => {
+      const now = new Date().toISOString();
+      const nextLogistics = {
+        ...entry.logistics,
+        guideNumber:
+          options.guideNumber !== undefined
+            ? options.guideNumber.trim() || null
+            : entry.logistics.guideNumber,
+        dispatchDate:
+          status === "Producto enviado" && !entry.logistics.dispatchDate ? now : entry.logistics.dispatchDate,
+        deliveredDate: status === "Realizado" && !entry.logistics.deliveredDate ? now : entry.logistics.deliveredDate,
+        reimbursementState:
+          entry.logistics.reimbursementState === "Completed" || entry.logistics.reimbursementState === "In process"
+            ? entry.logistics.reimbursementState
+            : isReimbursementZone(entry.zone) && hasReachedReimbursementTrigger(status, entry.zone)
+              ? entry.attachments.some((attachment) => attachment.kind === "proof" || attachment.kind === "photo")
+                ? "Requested"
+                : "Pending"
+              : entry.logistics.reimbursementState
+      };
+
+      return {
+        ...entry,
+        externalStatus: status,
+        internalSubstatus: getInitialSubstatus(status, entry.zone),
+        nextAction: getNextActionCopy(status),
+        updatedAt: now,
+        logistics: nextLogistics
+      };
+    });
 }
 
 export function KingestionProvider({
@@ -100,6 +185,53 @@ export function KingestionProvider({
     document.documentElement.dataset.theme = themeMode;
   }, [themeMode]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const runHeartbeat = async () => {
+      try {
+        const response = await fetch("/api/automation/heartbeat/kingston-rma", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({})
+        });
+
+        if (!response.ok) return;
+
+        const result = (await response.json().catch(() => null)) as Partial<AutomationTriggerResult> | null;
+        if (!automationChangedWorkspace(result)) return;
+
+        const workspaceResponse = await fetch("/api/workspace", {
+          credentials: "include",
+          cache: "no-store"
+        });
+
+        if (!workspaceResponse.ok || cancelled) return;
+        const nextSnapshot = (await workspaceResponse.json()) as WorkspaceSnapshot;
+        if (!cancelled) {
+          setWorkspaceSnapshot(nextSnapshot);
+        }
+      } catch {
+        // El heartbeat no debe interrumpir el uso normal de la plataforma.
+      }
+    };
+
+    void runHeartbeat();
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void runHeartbeat();
+      }
+    }, AUTOMATION_HEARTBEAT_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
   const refreshWorkspace = async () => {
     const response = await fetch("/api/workspace", {
       credentials: "include",
@@ -115,7 +247,16 @@ export function KingestionProvider({
     setWorkspaceSnapshot(nextSnapshot);
   };
 
-  const runMutation = async (payload: object) => {
+  const runMutation = async (payload: object, options: OptimisticMutationOptions = {}) => {
+    let previousSnapshot: WorkspaceSnapshot | null = null;
+
+    if (options.optimisticUpdate) {
+      setWorkspaceSnapshot((currentSnapshot) => {
+        previousSnapshot = currentSnapshot;
+        return options.optimisticUpdate ? options.optimisticUpdate(currentSnapshot) : currentSnapshot;
+      });
+    }
+
     setIsMutating(true);
 
     try {
@@ -136,6 +277,11 @@ export function KingestionProvider({
       const result = (await response.json()) as MutationResponse;
       setWorkspaceSnapshot(result.snapshot);
       return result;
+    } catch (error) {
+      if (previousSnapshot) {
+        setWorkspaceSnapshot(previousSnapshot);
+      }
+      throw error;
     } finally {
       setIsMutating(false);
     }
@@ -208,7 +354,51 @@ export function KingestionProvider({
 
   const completeReimbursement = async (caseId: string) => {
     try {
-      await runMutation({ type: "completeReimbursement", caseId });
+      await runMutation(
+        { type: "completeReimbursement", caseId },
+        {
+          optimisticUpdate: (snapshot) =>
+            updateSnapshotCase(snapshot, caseId, (entry) => ({
+              ...entry,
+              updatedAt: new Date().toISOString(),
+              logistics: {
+                ...entry.logistics,
+                reimbursementState: "Completed"
+              }
+            }))
+        }
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const markReimbursementInProcess = async (caseId: string) => {
+    try {
+      await runMutation(
+        { type: "markReimbursementInProcess", caseId },
+        {
+          optimisticUpdate: (snapshot) =>
+            updateSnapshotCase(snapshot, caseId, (entry) => ({
+              ...entry,
+              updatedAt: new Date().toISOString(),
+              logistics: {
+                ...entry.logistics,
+                reimbursementState: "In process"
+              }
+            }))
+        }
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const requestReimbursementMissingData = async (caseId: string) => {
+    try {
+      await runMutation({ type: "requestReimbursementMissingData", caseId });
       return true;
     } catch {
       return false;
@@ -253,16 +443,33 @@ export function KingestionProvider({
 
   const updateCaseStatus = async (caseId: string, status: ExternalStatus) => {
     try {
-      await runMutation({ type: "updateCaseStatus", caseId, status });
+      await runMutation(
+        { type: "updateCaseStatus", caseId, status },
+        {
+          optimisticUpdate: buildOptimisticStatusUpdate(caseId, status)
+        }
+      );
       return true;
     } catch {
       return false;
     }
   };
 
-  const completeQueueStep = async (caseId: string) => {
+  const completeQueueStep = async (
+    caseId: string,
+    options?: { nextStatus?: ExternalStatus; guideNumber?: string }
+  ) => {
     try {
-      await runMutation({ type: "completeQueueStep", caseId });
+      await runMutation(
+        { type: "completeQueueStep", caseId, ...options },
+        options?.nextStatus
+          ? {
+              optimisticUpdate: buildOptimisticStatusUpdate(caseId, options.nextStatus, {
+                guideNumber: options.guideNumber
+              })
+            }
+          : {}
+      );
       return true;
     } catch {
       return false;
@@ -312,6 +519,29 @@ export function KingestionProvider({
     }
   };
 
+  const runRemoteAction = async (source: RemoteControlSource = "web-button") => {
+    const response = await fetch("/api/remote-control/run", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        action: "diagnostico",
+        source
+      })
+    });
+
+    if (!response.ok) {
+      const message = await parseErrorMessage(response);
+      throw new Error(message);
+    }
+
+    const result = (await response.json()) as RemoteControlResult;
+    await refreshWorkspace();
+    return result;
+  };
+
   const value = useMemo<KingestionContextValue>(
     () => ({
       ...workspaceSnapshot,
@@ -333,7 +563,9 @@ export function KingestionProvider({
       addCaseAttachment,
       removeCaseAttachment,
       updateReplacementSku,
+      markReimbursementInProcess,
       completeReimbursement,
+      requestReimbursementMissingData,
       createOwner,
       updateOwner,
       deleteOwner,
@@ -345,6 +577,7 @@ export function KingestionProvider({
       deleteCase,
       recordCaseView,
       recordReportDownload,
+      runRemoteAction,
       canAccessModule: (moduleKey: ModulePermissionKey) =>
         activeOwner.team === "ADMIN" || canAccessModule(activeOwner.permissions, moduleKey),
       canManageModule: (moduleKey: ModulePermissionKey) =>

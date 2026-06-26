@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
@@ -7,23 +8,70 @@ import { CaseTable } from "@/components/workspace/case-table";
 import { ModuleSubnav } from "@/components/workspace/module-subnav";
 import { SectionPanel } from "@/components/workspace/section-panel";
 import { useKingestion } from "@/components/workspace/kingestion-provider";
+import type { KingstonCase } from "@/lib/kingston/types";
 
 type CasesModuleProps = {
   mode: "open" | "closed";
 };
 
+function normalizeSearchValue(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function matchesCaseSearch(entry: KingstonCase, query: string) {
+  if (!query) {
+    return true;
+  }
+
+  return normalizeSearchValue(
+    [
+      entry.internalNumber,
+      entry.kingstonNumber,
+      entry.clientName,
+      entry.contactName,
+      entry.contactEmail,
+      entry.owner,
+      entry.sku,
+      entry.replacementSku ?? "",
+      entry.productDescription,
+      entry.zone,
+      entry.externalStatus,
+      entry.internalSubstatus
+    ].join(" ")
+  ).includes(query);
+}
+
 export function CasesModule({ mode }: CasesModuleProps) {
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "archivados" ? "archivados" : "cerrados";
+  const [searchQuery, setSearchQuery] = useState("");
   const { openCases, closedCases, archivedCases, updateCaseStatus, restoreCase, canAccessModule, canManageModule, canArchiveCases } =
     useKingestion();
   const cases = (mode === "open" ? openCases : closedCases).toSorted(
     (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
   );
   const archived = archivedCases.toSorted((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+  const normalizedSearchQuery = normalizeSearchValue(searchQuery);
+  const filteredCases = cases.filter((entry) => matchesCaseSearch(entry, normalizedSearchQuery));
+  const filteredArchived = archived.filter((entry) => matchesCaseSearch(entry, normalizedSearchQuery));
   const isOpenView = mode === "open";
   const moduleKey = isOpenView ? "open-cases" : "closed-cases";
   const canManageCases = canManageModule("open-cases");
+  const searchBox = (
+    <label className="workspace-compact-search">
+      <span className="sr-only">Buscar casos</span>
+      <input
+        type="search"
+        value={searchQuery}
+        onChange={(event) => setSearchQuery(event.target.value)}
+        placeholder="Buscar"
+      />
+    </label>
+  );
 
   if (!canAccessModule(moduleKey)) {
     return (
@@ -59,15 +107,24 @@ export function CasesModule({ mode }: CasesModuleProps) {
         }
         aside={
           isOpenView ? (
-            <Link className="workspace-button" href="/cases/new">
-              Nuevo caso
-            </Link>
-          ) : undefined
+            <div className="workspace-panel-actions">
+              {searchBox}
+              <Link className="workspace-button" href="/cases/new">
+                Nuevo caso
+              </Link>
+            </div>
+          ) : (
+            searchBox
+          )
         }
       >
         {!isOpenView && view === "archivados" ? (
-          archived.length === 0 ? (
-            <div className="workspace-empty">No hay casos archivados para mostrar.</div>
+          filteredArchived.length === 0 ? (
+            <div className="workspace-empty">
+              {archived.length === 0
+                ? "No hay casos archivados para mostrar."
+                : "No hay casos archivados que coincidan con la busqueda."}
+            </div>
           ) : (
             <div className="workspace-table-wrap">
               <table className="workspace-table workspace-case-list-table">
@@ -83,7 +140,7 @@ export function CasesModule({ mode }: CasesModuleProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {archived.map((entry) => (
+                  {filteredArchived.map((entry) => (
                     <tr key={entry.id}>
                       <td>
                         <Link className="workspace-case-link" href={`/cases/${entry.id}`}>
@@ -139,10 +196,16 @@ export function CasesModule({ mode }: CasesModuleProps) {
           )
         ) : (
           <CaseTable
-            cases={cases}
+            cases={filteredCases}
             onStatusChange={updateCaseStatus}
             disableStatusChange={!canManageCases}
-            emptyLabel={isOpenView ? "No hay casos abiertos en este momento." : "No hay casos cerrados para mostrar."}
+            emptyLabel={
+              normalizedSearchQuery
+                ? "No hay casos que coincidan con la busqueda."
+                : isOpenView
+                  ? "No hay casos abiertos en este momento."
+                  : "No hay casos cerrados para mostrar."
+            }
           />
         )}
       </SectionPanel>

@@ -60,3 +60,71 @@ export type WorkspaceSnapshot = {
   owners: OwnerDirectoryEntry[];
   currentUser: OwnerDirectoryEntry;
 };
+
+export type AutomationControlState = {
+  paused: boolean;
+  pausedAt: string | null;
+  pausedByUserId: string | null;
+  pausedByUserName: string | null;
+};
+
+export type AutomationCloudStatus = {
+  control: AutomationControlState;
+  cloudOnly: boolean;
+  pilotMode: boolean;
+  manualTriggerConfigured: boolean;
+  proofAttachmentAiEnabled: boolean;
+  statusNotificationsEnabled: boolean;
+  ingestionCadence: "hourly";
+  targetPlatform: "Kingestion";
+  lastCaseActivityAt: string | null;
+  lastAutomationAuditAt: string | null;
+  lastRunAt?: string | null;
+  processedMailCount?: number;
+};
+
+export type AutomationTriggerResult = {
+  ok: boolean;
+  queued: boolean;
+  paused: boolean;
+  triggeredAt: string;
+  mode: "pilot" | "production";
+  target: "Kingestion";
+  message: string;
+  upstreamStatus?: number;
+  upstreamMessage?: string | null;
+  processedMessages?: number;
+  createdCases?: number;
+  updatedCases?: number;
+  sentEmails?: number;
+  queuedEmails?: number;
+  aiInterpretedMessages?: number;
+  reviewMessages?: number;
+  skippedMessages?: number;
+  errors?: string[];
+};
+
+export type RemoteControlAction = "diagnostico";
+
+export type RemoteControlSource = "web-button" | "api";
+
+export type RemoteControlSummary = {
+  openCases: number;
+  closedCases: number;
+  archivedCases: number;
+  pendingReimbursements: number;
+  pendingPurchases: number;
+  pendingService: number;
+  activeUsers: number;
+  serverTime: string;
+};
+
+export type RemoteControlResult = {
+  runId: string;
+  action: RemoteControlAction;
+  source: RemoteControlSource;
+  actorName: string;
+  executedAt: string;
+  message: string;
+  summary: RemoteControlSummary;
+};

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="kingestionMarkTitle">
+  <title id="kingestionMarkTitle">Kingestion</title>
+  <g transform="translate(22 1)">
+    <path d="M8 4h42v42H8z" fill="#cc0f1e"/>
+    <path d="M50 12c12 5 15 16 11 28-2 5-6 8-11 8V12z" fill="#cc0f1e"/>
+    <path d="M8 30l10 16H8z" fill="#8b0000" fill-opacity=".7"/>
+    <path d="M32 19l18 4" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="2.4"/>
+    <path d="M32 28l18 5" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="1.6"/>
+    <path d="M48 38l13 3" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="1.4"/>
+    <path d="M22 46h22v10H22z" fill="#cc0f1e"/>
+    <path d="M22 46h14l-6 10H22z" fill="#8b0000" fill-opacity=".6"/>
+    <path d="M6 56h48l8 24-12 25-16-12-16 12L6 80z" fill="#cc0f1e"/>
+    <path d="M6 56h12l-6 24H6z" fill="#8b0000" fill-opacity=".6"/>
+    <path d="M34 56v24" fill="none" stroke="#8b0000" stroke-opacity=".5" stroke-width="1.5"/>
+  </g>
+</svg>

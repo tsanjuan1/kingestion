@@ -8,6 +8,11 @@ import { useKingestion } from "@/components/workspace/kingestion-provider";
 import { ModuleSubnav } from "@/components/workspace/module-subnav";
 import { SectionPanel } from "@/components/workspace/section-panel";
 import { openAttachmentPreview } from "@/lib/kingston/attachment-viewer";
+import {
+  CLIENT_ATTACHMENT_MAX_BYTES,
+  formatClientAttachmentLimit,
+  uploadCaseAttachmentFile
+} from "@/lib/kingston/client-attachments";
 import { getAllowedStatusesForZone } from "@/lib/kingston/helpers";
 import type { CasePriority, DeliveryMode, KingstonCase, Zone } from "@/lib/kingston/types";
 
@@ -120,19 +125,6 @@ function inferAttachmentKind(file: File): DraftAttachment["kind"] {
   return "proof";
 }
 
-async function getPreviewUrl(file: File) {
-  if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
-    return undefined;
-  }
-
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("No pude leer el archivo."));
-    reader.readAsDataURL(file);
-  });
-}
-
 export default function NewCasePage() {
   const router = useRouter();
   const { activeOwners, activeOwner, createCase, canManageModule } = useKingestion();
@@ -160,22 +152,26 @@ export default function NewCasePage() {
       return;
     }
 
-    const oversizedFile = files.find((file) => file.size > 2 * 1024 * 1024);
+    const oversizedFile = files.find((file) => file.size > CLIENT_ATTACHMENT_MAX_BYTES);
     if (oversizedFile) {
-      setError(`El archivo ${oversizedFile.name} supera el limite de 2 MB.`);
+      setError(`El archivo ${oversizedFile.name} supera el limite de ${formatClientAttachmentLimit()}.`);
       return;
     }
 
     try {
       const nextAttachments = await Promise.all(
-        files.map(async (file) => ({
-          id: createDraftAttachmentId(file),
-          name: file.name,
-          kind: inferAttachmentKind(file),
-          sizeLabel: formatUploadSize(file.size),
-          mimeType: file.type,
-          previewUrl: await getPreviewUrl(file)
-        }))
+        files.map(async (file) => {
+          const uploadedFile = await uploadCaseAttachmentFile(file);
+
+          return {
+            id: createDraftAttachmentId(file),
+            name: uploadedFile.name,
+            kind: inferAttachmentKind(file),
+            sizeLabel: uploadedFile.sizeLabel || formatUploadSize(file.size),
+            mimeType: uploadedFile.mimeType || file.type,
+            previewUrl: uploadedFile.previewUrl
+          };
+        })
       );
 
       setError(null);

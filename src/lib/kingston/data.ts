@@ -12,11 +12,13 @@ export const referenceNow = "2026-04-21T10:00:00-03:00";
 
 export const modulePermissionKeys: ModulePermissionKey[] = [
   "summary",
+  "mail",
   "open-cases",
   "reimbursements",
   "pending-purchases",
   "pending-service",
   "closed-cases",
+  "audit",
   "reports",
   "settings"
 ];
@@ -36,7 +38,7 @@ export function getDefaultPermissionsForRole(role: UserRole): ModulePermissions 
     case "ADMIN":
       return createPermissionMap(modulePermissionKeys, modulePermissionKeys);
     case "SALES":
-      return createPermissionMap(["summary", "open-cases", "closed-cases", "reports"], ["open-cases"]);
+      return createPermissionMap(["summary", "mail", "open-cases", "closed-cases", "reports"], ["mail", "open-cases"]);
     case "TECHNICAL_SERVICE":
       return createPermissionMap(
         ["summary", "open-cases", "pending-service", "closed-cases"],
@@ -78,6 +80,14 @@ export const workflowStates: WorkflowState[] = [
     substatuses: ["Instrucciones enviadas", "Comprobante pendiente", "Producto en transito"]
   },
   {
+    status: "Caso recibido",
+    category: "service",
+    order: 2,
+    zones: ["Capital / AMBA"],
+    description: "ANYX recibio el caso y avisara al cliente cuando pueda acercarse a realizar el cambio.",
+    substatuses: ["Caso recibido por ANYX", "Cliente avisado", "Pendiente de disponibilidad para cambio"]
+  },
+  {
     status: "Producto recepcionado y en preparacion",
     category: "service",
     order: 3,
@@ -87,61 +97,79 @@ export const workflowStates: WorkflowState[] = [
       "Producto recibido",
       "Chequeo de stock local",
       "Chequeo de mayoristas",
-      "Definicion de via de resolucion"
+      "Definicion de via de resolucion",
+      "Reintegro en curso",
+      "OV en preparacion"
     ]
-  },
-  {
-    status: "Pedido Kingston",
-    category: "purchasing",
-    order: 4,
-    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
-    description: "No hubo disponibilidad local y el caso depende de reposicion con Kingston.",
-    substatuses: ["Solicitud interna armada", "Pedido enviado", "Esperando arribo"]
-  },
-  {
-    status: "Pedido deposito y etiquetado",
-    category: "service",
-    order: 5,
-    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
-    description: "Servicio tecnico y deposito preparan el reemplazo para continuar el circuito.",
-    substatuses: ["Catalogacion pendiente", "Catalogado", "Etiquetado pendiente", "Listo para compras"]
-  },
-  {
-    status: "Liberar mercaderia",
-    category: "purchasing",
-    order: 6,
-    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
-    description: "Compras debe liberar la mercaderia para continuar con la OV y la entrega.",
-    substatuses: ["Pendiente aprobacion", "Liberacion en revision", "Listo para OV"]
   },
   {
     status: "OV creada",
     category: "purchasing",
+    order: 4,
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "Ventas deja creada la OV y el caso pasa a compras para definir abastecimiento o recepcion.",
+    substatuses: ["OV pendiente de validacion", "OV creada", "Esperando decision de compras"]
+  },
+  {
+    status: "Liberar mercaderia",
+    category: "purchasing",
+    order: 5,
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "Estado legacy para compatibilidad con casos anteriores al flujo actual de compras.",
+    substatuses: ["Pendiente aprobacion", "Liberacion en revision", "Listo para OV"]
+  },
+  {
+    status: "Pedido Kingston",
+    category: "purchasing",
+    order: 6,
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "Compras ya pidio reposicion a Kingston y el caso sigue pendiente dentro del sector.",
+    substatuses: ["Solicitud interna armada", "Pedido enviado", "Esperando confirmacion de compras"]
+  },
+  {
+    status: "En stock",
+    category: "service",
     order: 7,
     zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
-    description: "La OV ya existe y el caso queda en seguimiento de compras hasta pasar a entrega.",
-    substatuses: ["OV pendiente de validacion", "OV creada", "Esperando salida operativa"]
+    description: "Compras confirmo disponibilidad en stock y el caso vuelve al flujo operativo para avanzar a deposito y etiquetado.",
+    substatuses: ["Stock confirmado", "Disponible para preparar", "Pendiente de paso a deposito"]
+  },
+  {
+    status: "Pendiente de recibirlo",
+    category: "service",
+    order: 8,
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "Ventas queda a la espera de la confirmacion de remitir o recepcion para volver a tomar el caso.",
+    substatuses: ["Esperando remitir", "Recepcion pendiente", "Pendiente de reingreso operativo"]
+  },
+  {
+    status: "Pedido deposito y etiquetado",
+    category: "service",
+    order: 9,
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    description: "Servicio tecnico y deposito dejan el reemplazo listo para la salida final del caso.",
+    substatuses: ["Catalogacion pendiente", "Catalogado", "Etiquetado pendiente", "Listo para entrega"]
   },
   {
     status: "Pedido guia",
     category: "delivery",
-    order: 8,
+    order: 10,
     zones: ["Interior / Gran Buenos Aires"],
-    description: "Logistica gestiona guia y datos finales para el despacho.",
+    description: "Estado legacy para compatibilidad con casos anteriores donde la guia se trabajaba como etapa separada.",
     substatuses: ["Transportista definido", "Guia solicitada", "Guia confirmada"]
   },
   {
     status: "Producto enviado",
     category: "delivery",
-    order: 9,
+    order: 11,
     zones: ["Interior / Gran Buenos Aires"],
-    description: "El reemplazo ya fue despachado y queda pendiente la entrega efectiva.",
-    substatuses: ["Despachado", "Tracking informado", "Esperando entrega"]
+    description: "El reemplazo ya fue despachado. La guia puede quedar pendiente de carga si aun no llego el numero final.",
+    substatuses: ["Despachado", "Guia pendiente", "Esperando entrega"]
   },
   {
     status: "Producto listo para retiro",
     category: "delivery",
-    order: 8,
+    order: 11,
     zones: ["Capital / AMBA"],
     description: "El reemplazo esta disponible en ANYX y se espera retiro del cliente.",
     substatuses: ["Aviso enviado", "Retiro pendiente", "Cliente confirmado"]
@@ -149,7 +177,7 @@ export const workflowStates: WorkflowState[] = [
   {
     status: "Realizado",
     category: "terminal",
-    order: 10,
+    order: 12,
     zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
     description: "El caso termino correctamente con entrega o retiro confirmado.",
     substatuses: ["Entrega confirmada", "Caso finalizado"]
@@ -157,7 +185,7 @@ export const workflowStates: WorkflowState[] = [
   {
     status: "Vencido",
     category: "terminal",
-    order: 11,
+    order: 13,
     zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
     description: "El caso quedo vencido por falta de respuesta o accion del cliente.",
     substatuses: ["Sin respuesta", "Vencimiento registrado"]
@@ -165,7 +193,7 @@ export const workflowStates: WorkflowState[] = [
   {
     status: "Cerrado",
     category: "terminal",
-    order: 12,
+    order: 14,
     zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
     description: "El caso se cerro administrativamente por decision interna o de Kingston.",
     substatuses: ["Cierre administrativo", "Cierre solicitado por Kingston"]
@@ -183,6 +211,22 @@ export const transitionRules: TransitionRule[] = [
   },
   {
     from: "Informado",
+    to: "Caso recibido",
+    zones: ["Capital / AMBA"],
+    requiredFields: ["contacto validado", "zona capital/amba confirmada"],
+    autoTasks: ["Avisar recepcion del caso al cliente"],
+    note: "Para Capital / AMBA se informa al cliente que ANYX recibio el caso y avisara cuando pueda acercarse."
+  },
+  {
+    from: "Caso recibido",
+    to: "Producto recepcionado y en preparacion",
+    zones: ["Capital / AMBA"],
+    requiredFields: ["recepcion o disponibilidad confirmada"],
+    autoTasks: ["Validar stock local"],
+    note: "Luego del aviso de recepcion, el caso continua con preparacion operativa."
+  },
+  {
+    from: "Informado",
     to: "Producto recepcionado y en preparacion",
     zones: ["Capital / AMBA"],
     requiredFields: ["recepcion confirmada"],
@@ -190,44 +234,108 @@ export const transitionRules: TransitionRule[] = [
     note: "Para Capital / AMBA el caso puede pasar directo a recepcion y preparacion."
   },
   {
-    from: "Producto recepcionado y en preparacion",
-    to: "Pedido Kingston",
-    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
-    requiredFields: ["sin stock local", "sin stock mayorista"],
-    autoTasks: ["Notificar a compras"],
-    note: "No avanzar a Kingston sin dejar registrada la falta de disponibilidad local."
+    from: "Aviso de envio",
+    to: "Producto recepcionado y en preparacion",
+    zones: ["Interior / Gran Buenos Aires"],
+    requiredFields: ["recepcion confirmada"],
+    autoTasks: ["Validar stock local"],
+    note: "Interior / GBA necesita recepcion efectiva del producto antes de crear la OV."
   },
   {
-    from: "Pedido deposito y etiquetado",
-    to: "Liberar mercaderia",
+    from: "Producto recepcionado y en preparacion",
+    to: "OV creada",
     zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
-    requiredFields: ["catalogacion terminada"],
-    autoTasks: ["Abrir seguimiento de compras"],
-    note: "La liberacion se trabaja recien cuando servicio tecnico deja el reemplazo listo."
+    requiredFields: ["reintegro revisado", "OV registrada"],
+    autoTasks: ["Enviar el caso a compras"],
+    note: "Luego del paso de reintegros, ventas mantiene el mismo estado y crea la OV antes de pasarlo a compras."
   },
   {
     from: "Liberar mercaderia",
     to: "OV creada",
     zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
-    requiredFields: ["liberacion aprobada"],
-    autoTasks: ["Avisar a compras"],
-    note: "La OV se crea solo despues de la liberacion de mercaderia."
+    requiredFields: ["mercaderia liberada"],
+    autoTasks: ["Registrar OV creada"],
+    note: "Se mantiene como compatibilidad para casos viejos que todavia usan este hito."
   },
   {
     from: "OV creada",
-    to: "Pedido guia",
+    to: "Pedido Kingston",
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    requiredFields: ["decision de compras registrada"],
+    autoTasks: ["Continuar seguimiento en compras"],
+    note: "Compras mantiene el caso cuando necesita pedir mercaderia a Kingston."
+  },
+  {
+    from: "OV creada",
+    to: "Pendiente de recibirlo",
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    requiredFields: ["compra o remitir confirmados"],
+    autoTasks: ["Devolver el caso a ventas"],
+    note: "Cuando compras ya resolvio la reposicion, el caso deja la bandeja de compras y vuelve a abiertos."
+  },
+  {
+    from: "OV creada",
+    to: "En stock",
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    requiredFields: ["stock confirmado"],
+    autoTasks: ["Devolver el caso a ventas"],
+    note: "Cuando compras confirma stock disponible, el caso sale de compras y sigue el mismo circuito que Pendiente de recibirlo."
+  },
+  {
+    from: "En stock",
+    to: "Pedido deposito y etiquetado",
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    requiredFields: ["stock reservado"],
+    autoTasks: ["Enviar el caso a servicio tecnico"],
+    note: "En stock funciona como alternativa a Pendiente de recibirlo y avanza a deposito y etiquetado."
+  },
+  {
+    from: "Pedido Kingston",
+    to: "Pendiente de recibirlo",
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    requiredFields: ["pedido enviado a Kingston"],
+    autoTasks: ["Esperar confirmacion de remitir"],
+    note: "El caso sigue en compras hasta que queda pendiente de recibir el reemplazo."
+  },
+  {
+    from: "Pendiente de recibirlo",
+    to: "Pedido deposito y etiquetado",
+    zones: ["Interior / Gran Buenos Aires", "Capital / AMBA"],
+    requiredFields: ["confirmacion de remitir"],
+    autoTasks: ["Enviar el caso a servicio tecnico"],
+    note: "Con la confirmacion de recepcion o remitir, servicio tecnico vuelve a tomar el caso."
+  },
+  {
+    from: "Pedido deposito y etiquetado",
+    to: "Producto enviado",
     zones: ["Interior / Gran Buenos Aires"],
-    requiredFields: ["direccion valida", "transportista definido"],
-    autoTasks: ["Pedir guia"],
-    note: "Solo aplica para la rama de despacho."
+    requiredFields: ["producto etiquetado"],
+    autoTasks: ["Despachar y cargar guia cuando este disponible"],
+    note: "Interior / GBA puede marcarse como enviado aunque la guia se cargue despues."
   },
   {
-    from: "OV creada",
+    from: "Pedido deposito y etiquetado",
     to: "Producto listo para retiro",
     zones: ["Capital / AMBA"],
-    requiredFields: ["retiro confirmado"],
+    requiredFields: ["producto etiquetado"],
     autoTasks: ["Avisar disponibilidad"],
-    note: "Capital / AMBA sigue por retiro sin pasar por guia."
+    note: "Capital / AMBA cierra por retiro, sin pasar por despacho."
+  },
+  {
+    from: "Producto enviado",
+    to: "Realizado",
+    zones: ["Interior / Gran Buenos Aires"],
+    requiredFields: ["confirmacion de entrega o cierre"],
+    autoTasks: ["Confirmar cierre comercial"],
+    note: "Ventas valida el cierre final del caso de despacho."
+  },
+  {
+    from: "Producto listo para retiro",
+    to: "Realizado",
+    zones: ["Capital / AMBA"],
+    requiredFields: ["retiro confirmado"],
+    autoTasks: ["Confirmar cierre comercial"],
+    note: "Ventas confirma el cierre del circuito de retiro."
   }
 ];
 

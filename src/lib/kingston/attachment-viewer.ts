@@ -1,22 +1,24 @@
 "use client";
 
+import { sanitizePreviewUrl } from "@/lib/kingston/url-safety";
+
 export async function openAttachmentPreview(previewUrl: string) {
-  try {
-    const response = await fetch(previewUrl);
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const openedWindow = window.open(blobUrl, "_blank", "noopener,noreferrer");
+  const safePreviewUrl = sanitizePreviewUrl(previewUrl);
+  if (!safePreviewUrl) {
+    throw new Error("El adjunto tiene una URL no permitida.");
+  }
 
-    if (!openedWindow) {
-      const fallbackLink = document.createElement("a");
-      fallbackLink.href = blobUrl;
-      fallbackLink.target = "_blank";
-      fallbackLink.rel = "noreferrer";
-      fallbackLink.click();
-    }
+  if ((safePreviewUrl.startsWith("http://") || safePreviewUrl.startsWith("https://")) && !safePreviewUrl.startsWith(window.location.origin)) {
+    throw new Error("Por seguridad, solo se pueden abrir adjuntos internos o cargados localmente.");
+  }
 
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-  } catch {
-    window.open(previewUrl, "_blank", "noopener,noreferrer");
+  const openedWindow = window.open(safePreviewUrl, "_blank", "noopener,noreferrer");
+
+  if (!openedWindow) {
+    const fallbackLink = document.createElement("a");
+    fallbackLink.href = safePreviewUrl;
+    fallbackLink.target = "_blank";
+    fallbackLink.rel = "noreferrer";
+    fallbackLink.click();
   }
 }

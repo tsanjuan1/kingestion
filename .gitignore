@@ -7,3 +7,4 @@ node_modules/
 .vercel-global/
 .npm-cache/
 npm-debug.log*
+tsconfig.tsbuildinfo

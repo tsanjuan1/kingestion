@@ -6,11 +6,14 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { useKingestion } from "@/components/workspace/kingestion-provider";
 import { getRoleLabel } from "@/lib/kingston/helpers";
+import { isModuleOnboardingId, moduleOnboardingIds, type ModuleOnboardingId } from "@/lib/kingston/onboarding";
 import type { ModulePermissionKey } from "@/lib/kingston/types";
 
 const SIDEBAR_STORAGE_KEY = "kingestion.sidebar.collapsed";
-const brandLogo = "/kingestion-logo.png?v=20260422";
-const brandMark = "/kingestion-mark.png?v=20260422";
+const LEGACY_MODULE_ONBOARDING_VERSION = "v1";
+const LEGACY_MODULE_ONBOARDING_STORAGE_PREFIX = `kingestion.module-onboarding.${LEGACY_MODULE_ONBOARDING_VERSION}`;
+const brandLogo = "/kingestion-logo-v3.svg?v=20260514";
+const brandMark = "/kingestion-mark-v3.svg?v=20260514";
 
 type IconProps = {
   className?: string;
@@ -31,6 +34,16 @@ function CasesIcon({ className }: IconProps) {
       <rect x="4" y="5" width="16" height="14" rx="4" fill="none" stroke="currentColor" strokeWidth="1.8" />
       <path d="M8 10h8M8 14h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M17.2 8.1l1.2 1.2-2.8 2.8-1.2.1.1-1.2z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function MailIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <rect x="3.5" y="5.5" width="17" height="13" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="m5.4 8.2 5.3 4.3a2.1 2.1 0 0 0 2.6 0l5.3-4.3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M16.2 14.2h2.2M16.2 16.6h1.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -78,6 +91,15 @@ function ReportsIcon({ className }: IconProps) {
     <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
       <path d="M6 18.5V11m6 7.5V6m6 12.5v-4.8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M4 18.5h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function AuditIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <path d="M12 4.2 18.5 7v4.5c0 4.1-2.6 7.1-6.5 8.3-3.9-1.2-6.5-4.2-6.5-8.3V7z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -144,6 +166,13 @@ const navigationItems = [
     hint: "Pantallazo general de la operacion"
   },
   {
+    moduleKey: "mail" as ModulePermissionKey,
+    href: "/mail",
+    label: "Correo",
+    icon: MailIcon,
+    hint: "Bandeja en vivo de casos Kingston"
+  },
+  {
     moduleKey: "open-cases" as ModulePermissionKey,
     href: "/cases",
     label: "Casos abiertos",
@@ -186,13 +215,209 @@ const navigationItems = [
     hint: "Consultas y exportes PDF"
   },
   {
+    moduleKey: "audit" as ModulePermissionKey,
+    href: "/audit",
+    label: "Auditoria",
+    icon: AuditIcon,
+    hint: "Actividad, correos y trazabilidad"
+  },
+  {
     moduleKey: "settings" as ModulePermissionKey,
     href: "/settings",
     label: "Configuracion",
     icon: SettingsIcon,
-    hint: "Usuarios, permisos y auditoria"
+    hint: "Usuarios, permisos y automatizacion"
   }
 ];
+
+type OnboardingModuleId = ModuleOnboardingId;
+
+type ModuleOnboardingCopy = {
+  id: OnboardingModuleId;
+  eyebrow: string;
+  title: string;
+  description: string;
+  steps: string[];
+};
+
+const moduleOnboarding: Record<OnboardingModuleId, ModuleOnboardingCopy> = {
+  summary: {
+    id: "summary",
+    eyebrow: "Resumen",
+    title: "Pantallazo de la operacion",
+    description: "Este modulo sirve para entender rapido como esta la gestion general sin entrar caso por caso.",
+    steps: [
+      "Usa los desplegables para ver solo la informacion que necesitas en ese momento.",
+      "La vista rapida marca volumen, prioridades y posibles cuellos de botella.",
+      "Desde aca podes pasar a busqueda o a los modulos operativos cuando detectes algo para revisar."
+    ]
+  },
+  mail: {
+    id: "mail",
+    eyebrow: "Correo",
+    title: "Bandeja de casos Kingston",
+    description: "Aca se refleja la carpeta de correos Kingston y podes revisar mensajes como una casilla interna.",
+    steps: [
+      "La bandeja se actualiza y dispara la automatizacion nativa cuando corresponde.",
+      "Al abrir un mail podes revisar cuerpo, adjuntos y datos principales.",
+      "Desde este modulo tambien podes responder manualmente si el caso necesita intervencion humana."
+    ]
+  },
+  "open-cases": {
+    id: "open-cases",
+    eyebrow: "Casos abiertos",
+    title: "Bandeja operativa",
+    description: "Aca quedan los casos activos que todavia necesitan seguimiento o accion de algun sector.",
+    steps: [
+      "La tabla muestra numero, fecha, cliente, SKU, zona y estado.",
+      "El estado se cambia desde el desplegable respetando la zona del caso.",
+      "Entrando al caso ves cliente, producto, operacion, adjuntos, historial y cambio de etapa."
+    ]
+  },
+  reimbursements: {
+    id: "reimbursements",
+    eyebrow: "Reintegros",
+    title: "Seguimiento de reintegros",
+    description: "Este modulo ayuda a controlar casos que requieren reintegro sin sacarlos de casos abiertos.",
+    steps: [
+      "Los casos aparecen cuando corresponde por zona y estado operativo.",
+      "Podes marcar 'Reintegro en proceso' como recordatorio visual intermedio.",
+      "Cuando se marca completado, el caso desaparece de esta bandeja de pendientes."
+    ]
+  },
+  "pending-purchases": {
+    id: "pending-purchases",
+    eyebrow: "Pendientes compras",
+    title: "Acciones de compras",
+    description: "Aca llegan los casos donde compras debe resolver abastecimiento, pedido Kingston o recepcion.",
+    steps: [
+      "Cada caso conserva su lugar en abiertos, pero queda destacado para compras.",
+      "El boton de completado permite pasar a la siguiente etapa habilitada.",
+      "Cuando hay opciones posibles, elegi la continuidad correcta antes de completar."
+    ]
+  },
+  "pending-service": {
+    id: "pending-service",
+    eyebrow: "Pendientes servicio tecnico",
+    title: "Acciones tecnicas",
+    description: "Este modulo concentra casos que necesita tomar Servicio Tecnico o deposito.",
+    steps: [
+      "Sirve para validar recepcion, deposito, etiquetado y salida final.",
+      "En casos de Interior/GBA puede quedar pendiente cargar numero de guia.",
+      "Si falta una guia, el administrador conserva control manual para corregir estados."
+    ]
+  },
+  "closed-cases": {
+    id: "closed-cases",
+    eyebrow: "Casos cerrados",
+    title: "Archivo operativo",
+    description: "Aca se consultan casos realizados, vencidos, cerrados y archivados.",
+    steps: [
+      "La vista mantiene el mismo criterio simple que casos abiertos.",
+      "Los casos archivados se consultan desde este modulo para no mezclar configuracion con operacion.",
+      "Solo usuarios autorizados pueden restaurar o revisar informacion sensible."
+    ]
+  },
+  reports: {
+    id: "reports",
+    eyebrow: "Reportes",
+    title: "Analisis y exportaciones",
+    description: "Este modulo sirve para consultar indicadores y preparar informacion para seguimiento o gestion.",
+    steps: [
+      "Podes revisar reportes por estado, cliente, SKU y auditoria segun tus permisos.",
+      "Los reportes usan la informacion actual de Kingestion.",
+      "Cuando descargues informacion sensible, queda registro en auditoria."
+    ]
+  },
+  audit: {
+    id: "audit",
+    eyebrow: "Auditoria",
+    title: "Trazabilidad de acciones",
+    description: "Aca se revisa quien hizo que, a que hora, y que correos automaticos fueron enviados o fallaron.",
+    steps: [
+      "Actividad muestra interacciones de usuarios y automatizaciones.",
+      "Correos muestra cola, envios, reintentos y fallos definitivos.",
+      "Este modulo solo aparece para usuarios con permiso otorgado por el administrador."
+    ]
+  },
+  settings: {
+    id: "settings",
+    eyebrow: "Configuracion",
+    title: "Usuarios, permisos y automatizacion",
+    description: "Aca el administrador controla responsables, accesos y parametros visuales/operativos.",
+    steps: [
+      "Usuarios permite crear, editar, desactivar o eliminar responsables.",
+      "Permisos define que puede ver o gestionar cada sector.",
+      "Automatizacion permite pausar, reanudar o disparar controles cuando sea necesario."
+    ]
+  },
+  "new-case": {
+    id: "new-case",
+    eyebrow: "Nuevo caso",
+    title: "Carga manual de RMA",
+    description: "Esta pantalla se usa cuando hay que crear un caso manualmente sin esperar la automatizacion de correo.",
+    steps: [
+      "Completá los datos principales del cliente, producto, zona y contacto.",
+      "Podés adjuntar comprobantes o imagenes si el caso ya trae documentacion.",
+      "Al guardar, el caso queda disponible en la bandeja correspondiente."
+    ]
+  },
+  "case-detail": {
+    id: "case-detail",
+    eyebrow: "Detalle de caso",
+    title: "Centro operativo del caso",
+    description: "Aca se trabaja el caso completo: datos, adjuntos, responsable, historial y cambio de etapa.",
+    steps: [
+      "Usa las pestañas para abrir solo la informacion que necesitas.",
+      "Historial muestra la cadena de correos y adjuntos vinculados.",
+      "Cambio de etapa permite avanzar el flujo respetando zona, permisos y restricciones."
+    ]
+  },
+  profile: {
+    id: "profile",
+    eyebrow: "Perfil",
+    title: "Tu usuario",
+    description: "Desde aca cada usuario puede revisar o actualizar sus datos permitidos.",
+    steps: [
+      "Podés modificar datos personales habilitados.",
+      "Tambien podes cambiar tu contraseña cuando lo necesites.",
+      "Los permisos de acceso los administra un usuario administrador."
+    ]
+  },
+  search: {
+    id: "search",
+    eyebrow: "Busqueda",
+    title: "Consulta avanzada",
+    description: "Esta pantalla sirve para encontrar casos abiertos o cerrados sin recargar las bandejas operativas.",
+    steps: [
+      "Combina texto, estado, zona y responsable para ubicar un caso.",
+      "Es util cuando no sabes si el caso esta abierto, cerrado o archivado.",
+      "Desde los resultados podes entrar al detalle si tenes permisos."
+    ]
+  },
+  tasks: {
+    id: "tasks",
+    eyebrow: "Tareas",
+    title: "Pendientes personales",
+    description: "Aca se agrupan tareas asociadas a casos y proximas acciones.",
+    steps: [
+      "Sirve para detectar tareas vencidas, proximas o bloqueadas.",
+      "Cada tarea mantiene referencia al caso que la origino.",
+      "La prioridad ayuda a ordenar la atencion diaria."
+    ]
+  },
+  workflow: {
+    id: "workflow",
+    eyebrow: "Workflow",
+    title: "Reglas del circuito",
+    description: "Esta vista documenta estados, subestados y transiciones disponibles.",
+    steps: [
+      "Los estados dependen de la zona del caso.",
+      "Las transiciones muestran el orden operativo previsto.",
+      "Es una referencia para entender por que cada modulo recibe ciertos casos."
+    ]
+  }
+};
 
 function isActive(pathname: string, href: string) {
   if (href === "/cases") {
@@ -202,10 +427,48 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function getOnboardingModuleId(pathname: string): OnboardingModuleId | null {
+  if (pathname === "/dashboard") return "summary";
+  if (pathname === "/mail") return "mail";
+  if (pathname === "/cases/new") return "new-case";
+  if (/^\/cases\/[^/]+/.test(pathname)) return "case-detail";
+  if (pathname === "/cases") return "open-cases";
+  if (pathname === "/reimbursements") return "reimbursements";
+  if (pathname === "/pending-purchases") return "pending-purchases";
+  if (pathname === "/pending-service") return "pending-service";
+  if (pathname === "/closed-cases") return "closed-cases";
+  if (pathname === "/reports") return "reports";
+  if (pathname === "/audit") return "audit";
+  if (pathname === "/settings" || pathname === "/admin") return "settings";
+  if (pathname.startsWith("/admin/workflow")) return "workflow";
+  if (pathname === "/profile") return "profile";
+  if (pathname === "/search") return "search";
+  if (pathname === "/tasks") return "tasks";
+  return null;
+}
+
+function getLegacyOnboardingStorageKey(userId: string, moduleId: OnboardingModuleId) {
+  return `${LEGACY_MODULE_ONBOARDING_STORAGE_PREFIX}.${userId}.${moduleId}`;
+}
+
+function getLegacySeenOnboardingModules(userId: string): OnboardingModuleId[] {
+  try {
+    return moduleOnboardingIds.filter((moduleId) => {
+      return window.localStorage.getItem(getLegacyOnboardingStorageKey(userId, moduleId)) === "done";
+    });
+  } catch {
+    return [];
+  }
+}
+
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [activeOnboarding, setActiveOnboarding] = useState<ModuleOnboardingCopy | null>(null);
+  const [seenOnboardingModules, setSeenOnboardingModules] = useState<Set<OnboardingModuleId> | null>(null);
+  const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
+  const [onboardingSaveError, setOnboardingSaveError] = useState<string | null>(null);
   const {
     activeOwner,
     canAccessModule,
@@ -228,6 +491,102 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(isSidebarCollapsed));
   }, [isSidebarCollapsed]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSeenOnboardingModules() {
+      setActiveOnboarding(null);
+      setSeenOnboardingModules(null);
+      setOnboardingSaveError(null);
+
+      try {
+        const response = await fetch("/api/profile/module-onboarding", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store"
+        });
+
+        if (!response.ok) {
+          throw new Error("No se pudo leer el instructivo visto del usuario.");
+        }
+
+        const data = (await response.json()) as { seenModules?: unknown[] };
+        const cloudSeenModules = (data.seenModules ?? []).filter(isModuleOnboardingId);
+        const legacySeenModules = getLegacySeenOnboardingModules(activeOwner.id);
+        const mergedSeenModules = Array.from(new Set([...cloudSeenModules, ...legacySeenModules]));
+
+        if (!cancelled) {
+          setSeenOnboardingModules(new Set(mergedSeenModules));
+        }
+
+        const legacyModulesToSync = legacySeenModules.filter((moduleId) => !cloudSeenModules.includes(moduleId));
+        if (legacyModulesToSync.length > 0) {
+          await fetch("/api/profile/module-onboarding", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ moduleIds: legacyModulesToSync })
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          // Si no se puede consultar la nube, preferimos no mostrar ayuda repetida por error de red.
+          setSeenOnboardingModules(new Set(moduleOnboardingIds));
+        }
+      }
+    }
+
+    void loadSeenOnboardingModules();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOwner.id]);
+
+  useEffect(() => {
+    const moduleId = getOnboardingModuleId(pathname);
+    setOnboardingSaveError(null);
+
+    if (!moduleId || !seenOnboardingModules) {
+      setActiveOnboarding(null);
+      return;
+    }
+
+    setActiveOnboarding(seenOnboardingModules.has(moduleId) ? null : moduleOnboarding[moduleId]);
+  }, [pathname, seenOnboardingModules]);
+
+  const handleContinueOnboarding = async () => {
+    if (!activeOnboarding) return;
+
+    try {
+      setIsSavingOnboarding(true);
+      setOnboardingSaveError(null);
+
+      const moduleId = activeOnboarding.id;
+      const response = await fetch("/api/profile/module-onboarding", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleId })
+      });
+
+      if (!response.ok) {
+        throw new Error("No se pudo guardar el instructivo visto.");
+      }
+
+      setSeenOnboardingModules((currentModules) => {
+        const nextModules = new Set(currentModules ?? []);
+        nextModules.add(moduleId);
+        return nextModules;
+      });
+      setActiveOnboarding(null);
+    } catch {
+      setOnboardingSaveError("No pude guardar este paso. Probá nuevamente para que no vuelva a mostrarse.");
+    } finally {
+      setIsSavingOnboarding(false);
+    }
+  };
+
   const handleLogout = async () => {
     await fetch("/api/auth/logout", {
       method: "POST",
@@ -236,6 +595,9 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     router.push("/login");
     router.refresh();
   };
+
+  const nextThemeMode = themeMode === "light" ? "dark" : "light";
+  const nextThemeLabel = nextThemeMode === "light" ? "Claro" : "Oscuro";
 
   return (
     <div className={`workspace-shell ${isSidebarCollapsed ? "workspace-shell-collapsed" : ""}`}>
@@ -246,6 +608,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             <div className="space-y-3">
               <Link
                 href="/dashboard"
+                prefetch={false}
                 className={`workspace-brand ${isSidebarCollapsed ? "workspace-brand-collapsed" : ""}`}
               >
                 {isSidebarCollapsed ? (
@@ -264,7 +627,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               </Link>
               {!isSidebarCollapsed ? (
                 <p className="text-sm leading-6 text-white/55">
-                  Gestion interna de RMA Kingston para ANYX. Separada de Anyx Comercial.
+                  Gestion interna de RMA Kingston para ANYX.
                 </p>
               ) : null}
             </div>
@@ -288,6 +651,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   className={`workspace-nav-link ${isActive(pathname, item.href) ? "workspace-nav-link-active" : ""} ${
                     isSidebarCollapsed ? "workspace-nav-link-collapsed" : ""
                   }`}
@@ -312,7 +676,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             {!isSidebarCollapsed ? (
               <div className="workspace-sidebar-summary">
                 <p className="workspace-kicker">Situacion actual</p>
-                <div className="space-y-2.5 text-sm text-white/66">
+                <div className="mt-3 space-y-2.5 text-sm text-white/66">
                   <div className="flex items-center justify-between">
                     <span>Abiertos</span>
                     <strong className="text-white">{dashboardSnapshot.openCases.length}</strong>
@@ -338,28 +702,20 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             <div className="workspace-sidebar-controls">
               <div className="workspace-theme-switcher">
                 {!isSidebarCollapsed ? <div className="workspace-topbar-label">Modo</div> : null}
-                <div className="workspace-theme-buttons">
-                  <button
-                    type="button"
-                    className={`workspace-theme-button ${themeMode === "light" ? "workspace-theme-button-active" : ""}`}
-                    onClick={() => setThemeMode("light")}
-                    aria-label="Modo claro"
-                    title="Modo claro"
-                  >
-                    <SunIcon className="workspace-theme-button-icon" />
-                    {!isSidebarCollapsed ? "Claro" : null}
-                  </button>
-                  <button
-                    type="button"
-                    className={`workspace-theme-button ${themeMode === "dark" ? "workspace-theme-button-active" : ""}`}
-                    onClick={() => setThemeMode("dark")}
-                    aria-label="Modo oscuro"
-                    title="Modo oscuro"
-                  >
-                    <MoonIcon className="workspace-theme-button-icon" />
-                    {!isSidebarCollapsed ? "Oscuro" : null}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="workspace-theme-toggle"
+                  onClick={() => setThemeMode(nextThemeMode)}
+                  aria-label={`Cambiar a modo ${nextThemeLabel.toLowerCase()}`}
+                  title={`Cambiar a modo ${nextThemeLabel.toLowerCase()}`}
+                >
+                  {nextThemeMode === "dark" ? (
+                    <MoonIcon className="workspace-theme-toggle-icon" />
+                  ) : (
+                    <SunIcon className="workspace-theme-toggle-icon" />
+                  )}
+                  {!isSidebarCollapsed ? nextThemeLabel : null}
+                </button>
               </div>
 
               <div className={`workspace-sidebar-session ${isSidebarCollapsed ? "workspace-sidebar-session-collapsed" : ""}`}>
@@ -375,21 +731,36 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                         {getRoleLabel(activeOwner.team)}
                       </div>
                     </div>
+                    <Link className="workspace-button-secondary w-full justify-center" href="/profile" prefetch={false}>
+                      <UserIcon className="workspace-inline-icon" />
+                      Perfil
+                    </Link>
                     <button className="workspace-button-secondary w-full justify-center" type="button" onClick={handleLogout}>
                       <LogoutIcon className="workspace-inline-icon" />
                       Cerrar sesion
                     </button>
                   </div>
                 ) : (
-                  <button
-                    className="workspace-sidebar-icon-button"
-                    type="button"
-                    onClick={handleLogout}
-                    aria-label="Cerrar sesion"
-                    title="Cerrar sesion"
-                  >
-                    <LogoutIcon className="workspace-inline-icon" />
-                  </button>
+                  <div className="space-y-2">
+                    <Link
+                      className="workspace-sidebar-icon-button"
+                      href="/profile"
+                      prefetch={false}
+                      aria-label="Perfil"
+                      title="Perfil"
+                    >
+                      <UserIcon className="workspace-inline-icon" />
+                    </Link>
+                    <button
+                      className="workspace-sidebar-icon-button"
+                      type="button"
+                      onClick={handleLogout}
+                      aria-label="Cerrar sesion"
+                      title="Cerrar sesion"
+                    >
+                      <LogoutIcon className="workspace-inline-icon" />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -400,6 +771,49 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       <div className="workspace-main">
         <main className="workspace-content">{children}</main>
       </div>
+
+      {activeOnboarding ? (
+        <div className="workspace-onboarding-overlay" role="presentation">
+          <section
+            className="workspace-onboarding-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="workspace-onboarding-title"
+            aria-describedby="workspace-onboarding-description"
+          >
+            <div className="workspace-onboarding-orb" aria-hidden="true" />
+            <p className="workspace-kicker">{activeOnboarding.eyebrow}</p>
+            <h2 id="workspace-onboarding-title" className="workspace-onboarding-title">
+              {activeOnboarding.title}
+            </h2>
+            <p id="workspace-onboarding-description" className="workspace-onboarding-description">
+              {activeOnboarding.description}
+            </p>
+
+            <div className="workspace-onboarding-steps">
+              {activeOnboarding.steps.map((step, index) => (
+                <div className="workspace-onboarding-step" key={step}>
+                  <span className="workspace-onboarding-step-number">{index + 1}</span>
+                  <span>{step}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="workspace-onboarding-footer">
+              <span>Esta ayuda se muestra una sola vez por usuario y modulo, en cualquier equipo.</span>
+              {onboardingSaveError ? <span className="workspace-onboarding-error">{onboardingSaveError}</span> : null}
+              <button
+                className="workspace-button"
+                type="button"
+                onClick={handleContinueOnboarding}
+                disabled={isSavingOnboarding}
+              >
+                {isSavingOnboarding ? "Guardando..." : "Continuar, entendido"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

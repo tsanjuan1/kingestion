@@ -38,10 +38,12 @@ const ZONE_WORKFLOW_ORDER: Record<Zone, ExternalStatus[]> = {
     "Informado",
     "Aviso de envio",
     "Producto recepcionado y en preparacion",
-    "Pedido Kingston",
-    "Pedido deposito y etiquetado",
-    "Liberar mercaderia",
     "OV creada",
+    "Liberar mercaderia",
+    "Pedido Kingston",
+    "En stock",
+    "Pendiente de recibirlo",
+    "Pedido deposito y etiquetado",
     "Pedido guia",
     "Producto enviado",
     "Realizado",
@@ -50,11 +52,14 @@ const ZONE_WORKFLOW_ORDER: Record<Zone, ExternalStatus[]> = {
   ],
   "Capital / AMBA": [
     "Informado",
+    "Caso recibido",
     "Producto recepcionado y en preparacion",
-    "Pedido Kingston",
-    "Pedido deposito y etiquetado",
-    "Liberar mercaderia",
     "OV creada",
+    "Liberar mercaderia",
+    "Pedido Kingston",
+    "En stock",
+    "Pendiente de recibirlo",
+    "Pedido deposito y etiquetado",
     "Producto listo para retiro",
     "Realizado",
     "Vencido",
@@ -70,6 +75,7 @@ const LEGACY_STATUS_MAP: Record<string, ExternalStatus> = {
 };
 
 const CLOSED_CASE_STATUSES: ExternalStatus[] = ["Realizado", "Vencido", "Cerrado"];
+const LEGACY_WORKFLOW_STATUSES: ExternalStatus[] = ["Liberar mercaderia", "Pedido guia"];
 
 function fallbackInitials(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -188,6 +194,8 @@ export function getReimbursementStateLabel(value: string) {
       return "No aplica";
     case "Requested":
       return "Comprobante cargado";
+    case "In process":
+      return "Reintegro en proceso";
     case "Completed":
       return "Completado";
     default:
@@ -271,6 +279,8 @@ export function getAuditActionLabel(action: string) {
       return "SKU de reemplazo";
     case "case-reimbursement-completed":
       return "Reintegro completado";
+    case "case-reimbursement-in-process":
+      return "Reintegro en proceso";
     case "case-status-updated":
       return "Cambio de estado";
     case "case-owner-updated":
@@ -291,6 +301,8 @@ export function getAuditActionLabel(action: string) {
       return "Alta de usuario";
     case "user-updated":
       return "Edicion de usuario";
+    case "user-profile-updated":
+      return "Perfil actualizado";
     case "user-deleted":
       return "Usuario eliminado";
     case "user-password-updated":
@@ -303,6 +315,34 @@ export function getAuditActionLabel(action: string) {
       return "Consulta de caso";
     case "report-downloaded":
       return "Descarga de reporte";
+    case "remote-control-run":
+      return "Control remoto";
+    case "automation-control-paused":
+      return "Automatizacion pausada";
+    case "automation-control-resumed":
+      return "Automatizacion reanudada";
+    case "automation-triggered":
+      return "Corrida automatica";
+    case "automation-native-run":
+      return "Automatizacion nativa";
+    case "automation-mail-processed":
+      return "Correo procesado";
+    case "automation-mail-reprocess":
+      return "Reproceso de correo";
+    case "automation-mail-review-needed":
+      return "Correo a revisar";
+    case "automation-customer-email-held":
+      return "Correo retenido";
+    case "automation-status-email-sent":
+      return "Aviso encolado";
+    case "automation-email-sent":
+      return "Correo enviado";
+    case "automation-email-failed":
+      return "Correo con error";
+    case "automation-email-gave-up":
+      return "Correo sin reintentos";
+    case "automation-sla-overdue":
+      return "SLA vencido";
     default:
       return action;
   }
@@ -352,11 +392,10 @@ export function getWorkflowState(status: ExternalStatus, zone?: Zone) {
 }
 
 export function getZoneWorkflowSteps(zone: Zone, options?: { includeTerminal?: boolean }) {
-  return workflowStates
-    .filter(
-      (entry) => entry.zones.includes(zone) && ((options?.includeTerminal ?? true) || entry.category !== "terminal")
-    )
-    .toSorted((left, right) => left.order - right.order);
+  return ZONE_WORKFLOW_ORDER[zone]
+    .filter((status) => (options?.includeTerminal ?? true) || !isTerminalStatus(status))
+    .map((status) => getWorkflowState(status, zone))
+    .filter((entry): entry is NonNullable<ReturnType<typeof getWorkflowState>> => Boolean(entry));
 }
 
 export function getWorkflowOrder(status: ExternalStatus, zone: Zone) {
@@ -376,7 +415,45 @@ export function getNextActionCopy(status: ExternalStatus) {
 }
 
 export function getAllowedStatusesForZone(zone: Zone, options?: { includeTerminal?: boolean }) {
-  return getZoneWorkflowSteps(zone, options).map((entry) => entry.status);
+  return getZoneWorkflowSteps(zone, options)
+    .map((entry) => entry.status)
+    .filter((status) => !LEGACY_WORKFLOW_STATUSES.includes(status));
+}
+
+export function getQueueCompletionOptions(entry: KingstonCase): ExternalStatus[] {
+  if (entry.externalStatus === "Informado") {
+    return entry.zone === "Interior / Gran Buenos Aires"
+      ? ["Aviso de envio"]
+      : ["Caso recibido"];
+  }
+
+  if (entry.externalStatus === "Caso recibido") {
+    return ["Producto recepcionado y en preparacion"];
+  }
+
+  if (entry.externalStatus === "Liberar mercaderia") {
+    return ["OV creada"];
+  }
+
+  if (entry.externalStatus === "OV creada") {
+    return ["Pedido Kingston", "Pendiente de recibirlo", "En stock"];
+  }
+
+  if (entry.externalStatus === "Pedido Kingston") {
+    return ["Pendiente de recibirlo"];
+  }
+
+  if (entry.externalStatus === "Pendiente de recibirlo" || entry.externalStatus === "En stock") {
+    return ["Pedido deposito y etiquetado"];
+  }
+
+  if (entry.externalStatus === "Pedido deposito y etiquetado") {
+    return entry.zone === "Interior / Gran Buenos Aires"
+      ? ["Producto enviado"]
+      : ["Producto listo para retiro"];
+  }
+
+  return [];
 }
 
 export function getNextWorkflowStatus(status: ExternalStatus, zone: Zone, options?: { includeTerminal?: boolean }) {
@@ -398,16 +475,7 @@ export function getNextWorkflowStatus(status: ExternalStatus, zone: Zone, option
 }
 
 export function getNextQueueCompletionStatus(entry: KingstonCase) {
-  if (
-    entry.externalStatus !== "Informado" &&
-    entry.externalStatus !== "Pedido deposito y etiquetado" &&
-    entry.externalStatus !== "Liberar mercaderia" &&
-    entry.externalStatus !== "OV creada"
-  ) {
-    return null;
-  }
-
-  return getNextWorkflowStatus(entry.externalStatus, entry.zone, { includeTerminal: false });
+  return getQueueCompletionOptions(entry)[0] ?? null;
 }
 
 export function isReimbursementZone(zone: KingstonCase["zone"]) {
@@ -424,6 +492,7 @@ export function shouldTrackReimbursement(entry: KingstonCase) {
     (hasReachedReimbursementTrigger(entry.externalStatus, entry.zone) ||
       entry.logistics.reimbursementState === "Pending" ||
       entry.logistics.reimbursementState === "Requested" ||
+      entry.logistics.reimbursementState === "In process" ||
       entry.logistics.reimbursementState === "Completed")
   );
 }
@@ -464,7 +533,10 @@ export function getPendingReimbursements(cases: KingstonCase[] = kingstonCases) 
 
 export function getPendingPurchasesCases(cases: KingstonCase[] = kingstonCases) {
   return getOpenCases(cases).filter(
-    (entry) => entry.externalStatus === "Liberar mercaderia" || entry.externalStatus === "OV creada"
+    (entry) =>
+      entry.externalStatus === "Liberar mercaderia" ||
+      entry.externalStatus === "OV creada" ||
+      entry.externalStatus === "Pedido Kingston"
   );
 }
 
@@ -628,6 +700,8 @@ export function getStatusTone(status: ExternalStatus) {
   if (status === "Realizado") return "success";
   if (status === "Vencido" || status === "Cerrado") return "warning";
   if (
+    status === "Pendiente de recibirlo" ||
+    status === "En stock" ||
     status === "Pedido deposito y etiquetado" ||
     status === "Liberar mercaderia" ||
     status === "OV creada" ||

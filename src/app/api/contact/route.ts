@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
 
 import { contactSchema } from "@/lib/contact-schema";
+import { assertRateLimit } from "@/lib/kingston/server";
 import { getSupabaseAdmin, hasSupabaseAdminConfig } from "@/lib/supabase";
+import { assertSameOriginRequest, getRequestClientKey } from "@/lib/request-security";
 
 export async function POST(request: Request) {
+  try {
+    assertSameOriginRequest(request);
+    await assertRateLimit("contact-form", getRequestClientKey(request), 8, 60 * 60 * 1000);
+  } catch (error) {
+    const status = typeof error === "object" && error && "status" in error ? Number(error.status) : 403;
+    return NextResponse.json({ message: error instanceof Error ? error.message : "No autorizado." }, { status });
+  }
+
   let payload: unknown;
 
   try {

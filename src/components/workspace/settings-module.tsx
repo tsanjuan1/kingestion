@@ -6,17 +6,16 @@ import { useSearchParams } from "next/navigation";
 import { modulePermissionKeys, transitionRules, workflowStates } from "@/lib/kingston/data";
 import { getDefaultPermissionsForRole } from "@/lib/kingston/data";
 import { ModuleSubnav } from "@/components/workspace/module-subnav";
+import { RemoteControlModule } from "@/components/workspace/remote-control-module";
 import { SectionPanel } from "@/components/workspace/section-panel";
 import { useKingestion } from "@/components/workspace/kingestion-provider";
 import {
-  formatDateTime,
-  getAuditActionLabel,
   getRoleLabel,
   getWorkflowCategoryLabel
 } from "@/lib/kingston/helpers";
 import type { ModulePermissionKey, ModulePermissions, OwnerDirectoryEntry } from "@/lib/kingston/types";
 
-type SettingsView = "usuarios" | "asignaciones" | "auditoria" | "workflow";
+type SettingsView = "usuarios" | "asignaciones" | "workflow" | "remoto";
 
 type OwnerFormState = {
   name: string;
@@ -36,11 +35,34 @@ const emptyOwnerForm: OwnerFormState = {
   permissions: getDefaultPermissionsForRole("SALES")
 };
 
+const assignmentRules = [
+  {
+    sector: "Pagos",
+    criterio: "Casos de Interior / Gran Buenos Aires con reintegro pendiente, solicitado o en proceso.",
+    estados: "Producto recepcionado y en preparacion"
+  },
+  {
+    sector: "Compras",
+    criterio: "Casos que requieren compra, liberacion o pedido a Kingston.",
+    estados: "OV creada, Liberar mercaderia, Pedido Kingston"
+  },
+  {
+    sector: "Servicio tecnico",
+    criterio: "Casos que requieren recepcion, deposito, etiquetado o gestion de guia.",
+    estados: "Informado, Aviso de envio, Caso recibido, Pedido deposito y etiquetado, Pedido guia"
+  },
+  {
+    sector: "Ventas",
+    criterio: "Seguimiento operativo y cierre comercial cuando no hay una cola sectorial pendiente.",
+    estados: "Producto recepcionado y en preparacion, Pendiente de recibirlo, Producto enviado, Producto listo para retiro"
+  }
+];
+
 function getView(value: string | null): SettingsView {
   switch (value) {
     case "asignaciones":
-    case "auditoria":
     case "workflow":
+    case "remoto":
       return value;
     default:
       return "usuarios";
@@ -51,6 +73,8 @@ function getModuleLabel(moduleKey: ModulePermissionKey) {
   switch (moduleKey) {
     case "summary":
       return "Resumen";
+    case "mail":
+      return "Correo";
     case "open-cases":
       return "Casos abiertos";
     case "reimbursements":
@@ -61,6 +85,8 @@ function getModuleLabel(moduleKey: ModulePermissionKey) {
       return "Pendientes servicio tecnico";
     case "closed-cases":
       return "Casos cerrados";
+    case "audit":
+      return "Auditoria";
     case "reports":
       return "Reportes";
     case "settings":
@@ -75,15 +101,12 @@ export function SettingsModule() {
   const view = getView(searchParams.get("view"));
   const {
     owners,
-    activeOwners,
     openCases,
-    auditLog,
     activeOwner,
     canManageModule,
     createOwner,
     updateOwner,
-    deleteOwner,
-    assignCaseOwner
+    deleteOwner
   } = useKingestion();
   const canManageSettings = canManageModule("settings");
   const [editingOwnerId, setEditingOwnerId] = useState<string | null>(null);
@@ -147,7 +170,7 @@ export function SettingsModule() {
     }));
   };
 
-  if (!canManageSettings && view === "usuarios") {
+  if (!canManageSettings && (view === "usuarios" || view === "remoto")) {
     return (
       <div className="workspace-page">
         <SectionPanel title="Sin permisos" description="Solo el administrador puede gestionar usuarios y permisos.">
@@ -165,8 +188,8 @@ export function SettingsModule() {
           items={[
             { href: "/settings?view=usuarios", label: "Usuarios", active: view === "usuarios" },
             { href: "/settings?view=asignaciones", label: "Asignaciones", active: view === "asignaciones" },
-            { href: "/settings?view=auditoria", label: "Auditoria", active: view === "auditoria" },
-            { href: "/settings?view=workflow", label: "Workflow", active: view === "workflow" }
+            { href: "/settings?view=workflow", label: "Workflow", active: view === "workflow" },
+            { href: "/settings?view=remoto", label: "Automatizacion", active: view === "remoto" }
           ]}
         />
 
@@ -252,7 +275,7 @@ export function SettingsModule() {
                       <div>
                         <div className="text-sm font-semibold text-white">{getModuleLabel(moduleKey)}</div>
                         <div className="text-xs text-white/48">
-                          {moduleKey === "settings" ? "Gestion de usuarios, permisos y auditoria." : "Acceso al modulo."}
+                          {moduleKey === "settings" ? "Gestion de usuarios y permisos." : "Acceso al modulo."}
                         </div>
                       </div>
 
@@ -346,78 +369,36 @@ export function SettingsModule() {
       ) : null}
 
       {view === "asignaciones" ? (
-        <SectionPanel title="Asignacion de casos abiertos" description="Reasigna responsables y deja trazabilidad automaticamente.">
+        <SectionPanel
+          title="Asignacion automatica de casos"
+          description="Kingestion calcula el responsable por estado, zona y bandeja. Si ya existe un usuario activo del sector correcto, lo conserva; si no, asigna al usuario de menor carga."
+        >
           <div className="workspace-table-wrap">
             <table className="workspace-table">
               <thead>
                 <tr>
-                  <th>Caso</th>
-                  <th>Cliente</th>
-                  <th>Estado</th>
-                  <th>Responsable actual</th>
-                  <th>Nuevo responsable</th>
+                  <th>Sector responsable</th>
+                  <th>Criterio</th>
+                  <th>Estados incluidos</th>
                 </tr>
               </thead>
               <tbody>
-                {openCases.map((entry) => (
-                  <tr key={entry.id}>
+                {assignmentRules.map((rule) => (
+                  <tr key={rule.sector}>
                     <td>
-                      <div className="font-medium text-white">{entry.internalNumber}</div>
-                      <div className="workspace-case-meta">{entry.kingstonNumber}</div>
+                      <div className="font-medium text-white">{rule.sector}</div>
                     </td>
-                    <td>{entry.clientName}</td>
-                    <td>{entry.externalStatus}</td>
-                    <td>{entry.owner}</td>
-                    <td>
-                      <select
-                        className="workspace-select"
-                        value={entry.owner}
-                        onChange={(event) => assignCaseOwner(entry.id, event.target.value)}
-                      >
-                        {activeOwners.map((owner) => (
-                          <option key={owner.id} value={owner.name}>
-                            {owner.name}
-                          </option>
-                        ))}
-                        <option value="Sin asignar">Sin asignar</option>
-                      </select>
-                    </td>
+                    <td>{rule.criterio}</td>
+                    <td>{rule.estados}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </SectionPanel>
-      ) : null}
-
-      {view === "auditoria" ? (
-        <SectionPanel title="Registro de actividad" description="Quien interactuo, a que hora y sobre que entidad.">
-          {auditLog.length === 0 ? (
-            <div className="workspace-empty">Todavia no hay acciones registradas.</div>
-          ) : (
-            <div className="workspace-table-wrap">
-              <table className="workspace-table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Usuario</th>
-                    <th>Accion</th>
-                    <th>Detalle</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditLog.map((entry) => (
-                    <tr key={entry.id}>
-                      <td>{formatDateTime(entry.createdAt)}</td>
-                      <td>{entry.actorName}</td>
-                      <td>{getAuditActionLabel(entry.action)}</td>
-                      <td>{entry.detail}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div className="workspace-empty">
+            Casos abiertos actualmente bajo asignacion automatica: {openCases.length}. Los cambios quedan registrados en
+            auditoria cuando el responsable se recalcula.
+          </div>
         </SectionPanel>
       ) : null}
 
@@ -482,6 +463,8 @@ export function SettingsModule() {
           </SectionPanel>
         </div>
       ) : null}
+
+      {view === "remoto" ? <RemoteControlModule /> : null}
     </div>
   );
 }

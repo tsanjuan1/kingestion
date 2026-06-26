@@ -16,12 +16,15 @@ export type EventKind =
 
 export type ExternalStatus =
   | "Informado"
+  | "Caso recibido"
   | "Aviso de envio"
   | "Producto recepcionado y en preparacion"
-  | "Pedido deposito y etiquetado"
-  | "Pedido Kingston"
-  | "Liberar mercaderia"
   | "OV creada"
+  | "Liberar mercaderia"
+  | "Pedido Kingston"
+  | "En stock"
+  | "Pendiente de recibirlo"
+  | "Pedido deposito y etiquetado"
   | "Pedido guia"
   | "Producto enviado"
   | "Producto listo para retiro"
@@ -97,7 +100,7 @@ export type CaseEvent = {
   createdAt: string;
 };
 
-export type ReimbursementState = "Pending" | "Not applicable" | "Requested" | "Completed";
+export type ReimbursementState = "Pending" | "Not applicable" | "Requested" | "In process" | "Completed";
 
 export type CaseLogistics = {
   mode: DeliveryMode;
@@ -167,11 +170,13 @@ export type UserRole = "ADMIN" | "SALES" | "TECHNICAL_SERVICE" | "PURCHASING" | 
 
 export type ModulePermissionKey =
   | "summary"
+  | "mail"
   | "open-cases"
   | "reimbursements"
   | "pending-purchases"
   | "pending-service"
   | "closed-cases"
+  | "audit"
   | "reports"
   | "settings";
 

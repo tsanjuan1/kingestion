@@ -1,15 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 
 import { SectionPanel } from "@/components/workspace/section-panel";
 import { useKingestion } from "@/components/workspace/kingestion-provider";
 import {
   formatDate,
-  getNextQueueCompletionStatus,
+  getQueueCompletionOptions,
   getPendingPurchasesCases,
   getPendingTechnicalCases
 } from "@/lib/kingston/helpers";
+import type { ExternalStatus } from "@/lib/kingston/types";
 
 type SectorQueueModuleProps = {
   type: "purchases" | "technical";
@@ -17,6 +19,9 @@ type SectorQueueModuleProps = {
 
 export function SectorQueueModule({ type }: SectorQueueModuleProps) {
   const { cases, completeQueueStep, canAccessModule, canManageModule } = useKingestion();
+  const [queueDrafts, setQueueDrafts] = useState<
+    Record<string, { nextStatus?: ExternalStatus; guideNumber?: string }>
+  >({});
   const moduleKey = type === "purchases" ? "pending-purchases" : "pending-service";
   const canManageQueue = canManageModule(moduleKey);
 
@@ -28,6 +33,16 @@ export function SectorQueueModule({ type }: SectorQueueModuleProps) {
   const sortedCases = queueCases.toSorted(
     (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
   );
+
+  const updateDraft = (caseId: string, nextPartial: { nextStatus?: ExternalStatus; guideNumber?: string }) => {
+    setQueueDrafts((current) => ({
+      ...current,
+      [caseId]: {
+        ...current[caseId],
+        ...nextPartial
+      }
+    }));
+  };
 
   if (!canAccessModule(moduleKey)) {
     return (
@@ -45,8 +60,8 @@ export function SectorQueueModule({ type }: SectorQueueModuleProps) {
         title={type === "purchases" ? "Bandeja de compras" : "Bandeja de servicio tecnico"}
         description={
           type === "purchases"
-            ? "Casos que entran a compras cuando quedan en Liberar mercaderia u OV creada."
-            : "Casos que entran a servicio tecnico cuando quedan Informados o en Pedido deposito y etiquetado."
+            ? "Casos que quedan pendientes de compras en OV creada, Pedido Kingston o estados legacy de liberacion."
+            : "Casos que entran a servicio tecnico cuando quedan informados o en pedido de deposito y etiquetado."
         }
       >
         {sortedCases.length === 0 ? (
@@ -71,7 +86,18 @@ export function SectorQueueModule({ type }: SectorQueueModuleProps) {
               </thead>
               <tbody>
                 {sortedCases.map((entry) => {
-                  const nextStatus = getNextQueueCompletionStatus(entry);
+                  const nextOptions = getQueueCompletionOptions(entry);
+                  const selectedNextStatus =
+                    queueDrafts[entry.id]?.nextStatus && nextOptions.includes(queueDrafts[entry.id]!.nextStatus!)
+                      ? queueDrafts[entry.id]!.nextStatus
+                      : nextOptions[0];
+                  const showStatusSelector = nextOptions.length > 1;
+                  const showGuideInput =
+                    type === "technical" &&
+                    entry.zone === "Interior / Gran Buenos Aires" &&
+                    entry.externalStatus === "Pedido deposito y etiquetado" &&
+                    selectedNextStatus === "Producto enviado";
+                  const guideNumberValue = queueDrafts[entry.id]?.guideNumber ?? entry.logistics.guideNumber ?? "";
 
                   return (
                     <tr key={entry.id}>
@@ -99,18 +125,68 @@ export function SectorQueueModule({ type }: SectorQueueModuleProps) {
                       <td>
                         <div className="font-medium text-white">{entry.externalStatus}</div>
                         <div className="workspace-case-meta">
-                          {nextStatus ? `Siguiente: ${nextStatus}` : "Sin siguiente etapa automatica"}
+                          {nextOptions.length > 1
+                            ? `Siguientes posibles: ${nextOptions.join(" / ")}`
+                            : selectedNextStatus
+                              ? `Siguiente: ${selectedNextStatus}`
+                              : "Sin siguiente etapa automatica"}
                         </div>
                       </td>
                       <td>
-                        <button
-                          className="workspace-link-button"
-                          type="button"
-                          onClick={() => void completeQueueStep(entry.id)}
-                          disabled={!canManageQueue || !nextStatus}
-                        >
-                          Completar
-                        </button>
+                        <div className="workspace-inline-form workspace-queue-actions">
+                          {showStatusSelector ? (
+                            <label className="workspace-label">
+                              <span>Proximo estado</span>
+                              <select
+                                className="workspace-select"
+                                value={selectedNextStatus ?? ""}
+                                onChange={(event) =>
+                                  updateDraft(entry.id, {
+                                    nextStatus: event.target.value as ExternalStatus
+                                  })
+                                }
+                                disabled={!canManageQueue}
+                              >
+                                {nextOptions.map((status) => (
+                                  <option key={status} value={status}>
+                                    {status}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : null}
+
+                          {showGuideInput ? (
+                            <label className="workspace-label">
+                              <span>Numero de guia</span>
+                              <input
+                                className="workspace-input"
+                                value={guideNumberValue}
+                                onChange={(event) =>
+                                  updateDraft(entry.id, {
+                                    guideNumber: event.target.value
+                                  })
+                                }
+                                placeholder="Cargar ahora o despues"
+                                disabled={!canManageQueue}
+                              />
+                            </label>
+                          ) : null}
+
+                          <button
+                            className="workspace-link-button"
+                            type="button"
+                            onClick={() =>
+                              void completeQueueStep(entry.id, {
+                                nextStatus: selectedNextStatus,
+                                guideNumber: showGuideInput ? guideNumberValue : undefined
+                              })
+                            }
+                            disabled={!canManageQueue || !selectedNextStatus}
+                          >
+                            Completar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

@@ -38,6 +38,7 @@ El pack usa estos endpoints nuevos:
 
 - `GET /api/integrations/n8n/reference`
 - `GET /api/integrations/n8n/activity`
+- `GET /api/integrations/n8n/control/kingston-rma`
 - `GET /api/integrations/n8n/cases`
 - `POST /api/integrations/n8n/cases`
 - `GET /api/integrations/n8n/cases/:caseId`
@@ -56,6 +57,10 @@ En `Kingestion`:
 DATABASE_URL="postgres://..."
 KINGESTION_AUTOMATION_API_KEY="..."
 KINGESTION_AUTOMATION_ACTOR_EMAIL="automation@kingestion.local"
+KINGESTION_AUTOMATION_PILOT_MODE="true"
+KINGESTION_AUTOMATION_PROOF_AI="true"
+KINGESTION_N8N_PILOT_TRIGGER_URL=""
+KINGESTION_N8N_PILOT_TRIGGER_TOKEN=""
 ```
 
 En `n8n`:
@@ -68,6 +73,9 @@ KINGESTION_SUPERVISION_EMAIL="operaciones@anyx.com.ar"
 KINGESTION_TECH_EMAIL="serviciotecnico@anyx.com.ar"
 KINGESTION_PURCHASING_EMAIL="compras@anyx.com.ar"
 KINGESTION_LOGISTICS_EMAIL="logistica@anyx.com.ar"
+KINGESTION_KINGSTON_REQUEST_EMAIL="gdelcastillo@anyx.com.ar"
+KINGESTION_CUSTOMER_FORM_URL="https://..."
+KINGESTION_PICKUP_ADDRESS="Sucursal ANYX"
 KINGSTON_RMA_TO="rma@kingston.com"
 ```
 
@@ -75,46 +83,102 @@ Credenciales a crear en `n8n`:
 
 - `IMAP` para leer el buzón de Kingston o el buzón intermediario
 - `SMTP` para enviar correos
-- `OpenAI` para los nodos de interpretación y redacción
+- un proveedor compatible OpenAI para los nodos de interpretación y redacción, por ejemplo `Groq`
 
-## Mapeo del proceso al diagrama
+## Matriz de correos rescatada del SharePoint viejo
 
-Estado inicial:
+- Ingesta de autorización:
+  - acuse automático al remitente de Kingston
+  - confirmación inicial al end user avisando que el caso quedó recibido en `Kingestion`
 
-- llega mail de Kingston
-- `n8n` interpreta contenido con IA
-- crea o actualiza caso
-- responde a Kingston
-- responde al end user según zona
+- `Aviso de envio`:
+  - correo al cliente con instrucciones de envío
+  - pedido de comprobante oficial con costo de envío
+  - link al formulario web para datos de entrega y bancarios
 
-Interior / Gran Buenos Aires:
+- `Producto recepcionado y en preparacion`:
+  - correo al cliente confirmando recepción del producto fallado
 
-- `Informado`
-- `Aviso de envio`
-- `Producto recepcionado y en preparacion`
-- `Pedido Kingston` si no hay stock local ni mayorista
-- `Pedido deposito y etiquetado`
-- `Liberar mercaderia`
-- `OV creada`
-- `Pedido guia`
-- `Producto enviado`
-- `Realizado` o `Vencido` o `Cerrado`
+- `OV creada`:
+  - aviso a compras para que tome la OV y defina continuidad del circuito actual
 
-Capital / AMBA:
+- `Pedido Kingston`:
+  - correo interno a `KINGESTION_KINGSTON_REQUEST_EMAIL` para consolidar pedido a Kingston EEUU
+  - correo al cliente informando falta local y demora por reposición
 
-- `Informado`
-- `Producto recepcionado y en preparacion`
-- `Pedido Kingston` si no hay stock local ni mayorista
-- `Pedido deposito y etiquetado`
-- `Liberar mercaderia`
-- `OV creada`
-- `Producto listo para retiro`
-- `Realizado` o `Vencido` o `Cerrado`
+- `Pedido deposito y etiquetado`:
+  - aviso a servicio técnico para catalogar el reemplazo como RMA y disponerlo para envío o retiro según zona
+
+- `Producto enviado`:
+  - correo al cliente informando despacho
+  - si todavía no existe guía, el texto aclara que se informará luego
+
+- `Producto listo para retiro`:
+  - correo al cliente con instrucciones para retirar el reemplazo en ANYX
+
+- `Realizado`, `Vencido`, `Cerrado`:
+  - correo final de cierre al cliente con el contexto correspondiente
+
+## Matriz de respuesta cuando el cliente consulta por su caso
+
+Esta tabla no reemplaza los avisos proactivos por cambio de estado.
+
+Se usa cuando entra un correo de seguimiento sobre un caso ya existente y `n8n` tiene que responderle al end user segun el estado actual del caso dentro de `Kingestion`.
+
+- `Informado`:
+  - "Su caso está recibido y en proceso de solución. Tiempo aproximado entre 5 y 45 días hábiles desde que recibió el primer mail informándole sobre el comienzo del trámite."
+
+- `Aviso de envio`:
+  - "A la espera de recepción del producto fallado enviado por Ud. Si aún no lo ha enviado por favor seguir las instrucciones enviadas en mail anterior. Muchas gracias."
+
+- `Producto recepcionado y en preparacion`:
+  - "Hemos recibido su producto fallado y estamos en proceso de enviarle el cambio correspondiente en caso de contar con disponibilidad local. Tendrá una actualización sobre su caso durante el transcurso de los próximos 10 días hábiles."
+
+- `Pedido deposito y etiquetado`:
+  - se adapta con el texto operativo heredado de `Pedido etiqueta / Pedido depósito`
+  - "Producto en Anyx, en preparación. En los próximos 5 días hábiles tendrá novedades sobre el estado de su caso."
+
+- `Pedido Kingston`:
+  - "El producto nuevo necesario para cumplir con el cambio en gtia. NO se encuentra disponible en Argentina, por lo que ha sido solicitado a KINGSTON en EEUU. Le avisaremos por este medio cuando arribe a la Argentina en un plazo aproximado de 10 días hábiles."
+
+- `Producto enviado`:
+  - "Su reemplazo ha sido enviado. Corrobore con el Expreso el estado de su envío, los datos de su envío han sido enviados por e-mail."
+
+- `Producto listo para retiro`:
+  - "El producto/s esta/n listo/s para su retiro. Podrá pasar a realizar el cambio los días Lunes, Miércoles o Viernes (EXCEPTO FERIADOS) de 9 a 17 hs por Avenida San Isidro Labrador 4471 (C.A.B.A.). Por favor recuerde traer el/los producto/s fallado/s."
+
+- `Realizado`:
+  - "Producto cambiado con exito. RMA finalizado. Gracias por confiar en KINGSTON."
+
+- `Vencido`:
+  - "Caso VENCIDO ya que ha pasado el tiempo estipulado para obtener una respuesta de su parte. Si aún desea tramitar el cambio deberá volver a generar una nueva solicitud de RMA ante KINGSTON."
+
+- `Cerrado`:
+  - "Caso CERRADO por parte de KINGSTON. Cualquier consulta comunicarse nuevamente con KINGSTON."
+
+- `OV creada`:
+  - no se le envía correo al cliente
+  - queda como estado interno de compras
+
+## Adaptación al flujo actual de Kingestion
+
+No se modifican estados ni transiciones de `Kingestion`.
+
+La adaptación consiste en mapear los avisos del circuito viejo a los estados actuales:
+
+- el antiguo aviso inicial al cliente ahora sale al crear un caso nuevo en `Kingestion`
+- el antiguo `Aviso envio` sigue existiendo para `Interior / Gran Buenos Aires` y mantiene su correo con instrucciones + formulario
+- el antiguo circuito de `Pedido a Kingston` se divide en un aviso interno de consolidación y un aviso externo de demora
+- el antiguo `Pedido etiqueta` se adapta al estado actual `Pedido deposito y etiquetado`
+- el antiguo `Pedido guia` no cambia el workflow actual: el aviso de despacho sale desde `Producto enviado` y contempla que la guía pueda cargarse después
+- el antiguo `Producto listo para retiro` conserva su aviso al cliente dentro del estado actual homónimo
+- la matriz heredada de consultas por estado se aplica solo a correos de seguimiento sobre casos existentes
+- `OV creada` se mantiene como estado interno: no responde al cliente cuando consulta por mail
 
 Colas automáticas cubiertas:
 
 - `Pendientes servicio tecnico`: `Informado`, `Pedido deposito y etiquetado`
-- `Pendientes compras`: `Liberar mercaderia`, `OV creada`
+- `Pendientes compras`: `OV creada`, `Pedido Kingston`
 - `Reintegros`: Interior / Gran Buenos Aires con reintegro pendiente
 
 ## Criterio de IA
@@ -123,8 +187,9 @@ La IA en este pack se usa para 4 cosas:
 
 1. interpretar mails de Kingston y estructurarlos como datos
 2. inferir faltantes razonables y dejarlos explicitados
-3. redactar correos operativos claros en español
+3. redactar correos operativos claros en español usando la matriz heredada del SharePoint anterior
 4. resolver pedidos del copiloto operativo contra la API de `Kingestion`
+5. detectar si un adjunto recibido funciona como comprobante de pago o reintegro y adjuntarlo al caso correcto
 
 No debería tomar decisiones irreversibles sola.
 
@@ -155,5 +220,5 @@ Después de validar este pack, el paso natural es sumar:
 
 - integración con un mailbox real de Kingston
 - plantillas HTML de correo por estado
-- un webhook saliente desde `Kingestion` hacia `n8n` para no depender de polling
-- integración con ERP o SharePoint si querés cerrar completamente el circuito manual
+- webhook saliente desde `Kingestion` hacia `n8n` si más adelante querés dejar de depender del polling del piloto
+- integración con ERP si querés cerrar completamente el circuito manual restante

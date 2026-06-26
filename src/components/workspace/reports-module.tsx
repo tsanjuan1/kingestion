@@ -1,90 +1,173 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 
 import { MetricCard } from "@/components/workspace/metric-card";
-import { ModuleSubnav } from "@/components/workspace/module-subnav";
 import { SectionPanel } from "@/components/workspace/section-panel";
 import { useKingestion } from "@/components/workspace/kingestion-provider";
 import { downloadPdfReport } from "@/lib/kingston/pdf";
-import { formatCount, getAuditActionLabel, getTeamLabel } from "@/lib/kingston/helpers";
+import { formatCount, formatDate } from "@/lib/kingston/helpers";
+import type { KingstonCase } from "@/lib/kingston/types";
 
-type ReportView = "general" | "estados" | "clientes" | "sku" | "auditoria";
+type ReportPeriodMode = "monthly" | "quarterly" | "semester" | "yearly";
 
-function getReportView(value: string | null): ReportView {
-  switch (value) {
-    case "estados":
-    case "clientes":
-    case "sku":
-    case "auditoria":
-      return value;
-    default:
-      return "general";
+const MONTHS = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre"
+] as const;
+
+const QUARTERS = [
+  { value: 1, label: "Enero a marzo", startMonth: 0, endMonth: 3 },
+  { value: 2, label: "Abril a junio", startMonth: 3, endMonth: 6 },
+  { value: 3, label: "Julio a septiembre", startMonth: 6, endMonth: 9 },
+  { value: 4, label: "Octubre a diciembre", startMonth: 9, endMonth: 12 }
+] as const;
+
+const SEMESTERS = [
+  { value: 1, label: "Enero a junio", startMonth: 0, endMonth: 6 },
+  { value: 2, label: "Julio a diciembre", startMonth: 6, endMonth: 12 }
+] as const;
+
+function buildYearOptions(cases: KingstonCase[]) {
+  const currentYear = new Date().getFullYear();
+  const years = new Set<number>([currentYear]);
+
+  cases.forEach((entry) => {
+    const year = new Date(entry.openedAt).getFullYear();
+    if (Number.isFinite(year)) {
+      years.add(year);
+    }
+  });
+
+  return Array.from(years).sort((left, right) => right - left);
+}
+
+function buildPeriodRange(input: {
+  mode: ReportPeriodMode;
+  year: number;
+  month: number;
+  quarter: number;
+  semester: number;
+}) {
+  if (input.mode === "monthly") {
+    return {
+      label: `${MONTHS[input.month]} ${input.year}`,
+      start: new Date(input.year, input.month, 1),
+      end: new Date(input.year, input.month + 1, 1)
+    };
   }
+
+  if (input.mode === "quarterly") {
+    const quarter = QUARTERS.find((entry) => entry.value === input.quarter) ?? QUARTERS[0];
+    return {
+      label: `${quarter.label} ${input.year}`,
+      start: new Date(input.year, quarter.startMonth, 1),
+      end: new Date(input.year, quarter.endMonth, 1)
+    };
+  }
+
+  if (input.mode === "semester") {
+    const semester = SEMESTERS.find((entry) => entry.value === input.semester) ?? SEMESTERS[0];
+    return {
+      label: `${semester.label} ${input.year}`,
+      start: new Date(input.year, semester.startMonth, 1),
+      end: new Date(input.year, semester.endMonth, 1)
+    };
+  }
+
+  return {
+    label: `Año ${input.year}`,
+    start: new Date(input.year, 0, 1),
+    end: new Date(input.year + 1, 0, 1)
+  };
+}
+
+function sanitizePdfCell(value: string | number | null | undefined) {
+  return String(value ?? "-").replace(/\s+/g, " ").trim() || "-";
 }
 
 export function ReportsModule() {
-  const searchParams = useSearchParams();
-  const view = getReportView(searchParams.get("view"));
-  const { reportsSnapshot, dashboardSnapshot, auditLog, recordReportDownload, canAccessModule } = useKingestion();
-  const maxStatus = Math.max(...dashboardSnapshot.byStatus.map((entry) => entry.count), 1);
-  const maxClient = Math.max(...reportsSnapshot.byClient.map((entry) => entry.value), 1);
-  const maxSku = Math.max(...reportsSnapshot.bySku.map((entry) => entry.value), 1);
+  const { cases, recordReportDownload, canAccessModule } = useKingestion();
+  const today = new Date();
+  const [periodMode, setPeriodMode] = useState<ReportPeriodMode>("quarterly");
+  const [selectedYear, setSelectedYear] = useState(today.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(today.getMonth());
+  const [selectedQuarter, setSelectedQuarter] = useState(Math.floor(today.getMonth() / 3) + 1);
+  const [selectedSemester, setSelectedSemester] = useState(today.getMonth() < 6 ? 1 : 2);
 
-  const reportPayload = useMemo(() => {
-    if (view === "estados") {
-      return {
-        title: "Reporte por estado",
-        filename: "kingestion-reporte-estados.pdf",
-        lines: dashboardSnapshot.byStatus.map((entry) => `${entry.status}: ${entry.count} casos`)
-      };
-    }
+  const reportableCases = useMemo(() => cases.filter((entry) => !entry.archivedAt), [cases]);
+  const yearOptions = useMemo(() => buildYearOptions(reportableCases), [reportableCases]);
+  const period = useMemo(
+    () =>
+      buildPeriodRange({
+        mode: periodMode,
+        year: selectedYear,
+        month: selectedMonth,
+        quarter: selectedQuarter,
+        semester: selectedSemester
+      }),
+    [periodMode, selectedYear, selectedMonth, selectedQuarter, selectedSemester]
+  );
 
-    if (view === "clientes") {
-      return {
-        title: "Reporte por cliente",
-        filename: "kingestion-reporte-clientes.pdf",
-        lines: reportsSnapshot.byClient.map((entry) => `${entry.label}: ${entry.value} casos`)
-      };
-    }
+  const periodCases = useMemo(() => {
+    const startTime = period.start.getTime();
+    const endTime = period.end.getTime();
 
-    if (view === "sku") {
-      return {
-        title: "Reporte por SKU",
-        filename: "kingestion-reporte-sku.pdf",
-        lines: reportsSnapshot.bySku.map((entry) => `${entry.label}: ${entry.value} unidades`)
-      };
-    }
+    return reportableCases
+      .filter((entry) => {
+        const openedAt = new Date(entry.openedAt).getTime();
+        return Number.isFinite(openedAt) && openedAt >= startTime && openedAt < endTime;
+      })
+      .toSorted((left, right) => new Date(left.openedAt).getTime() - new Date(right.openedAt).getTime());
+  }, [period, reportableCases]);
 
-    if (view === "auditoria") {
-      return {
-        title: "Reporte de auditoria",
-        filename: "kingestion-reporte-auditoria.pdf",
-        lines: auditLog
-          .slice(0, 40)
-          .map((entry) => `${entry.actorName} | ${getAuditActionLabel(entry.action)} | ${entry.detail}`)
-      };
-    }
+  const totalUnits = periodCases.reduce((total, entry) => total + entry.quantity, 0);
+  const totalClients = new Set(periodCases.map((entry) => entry.clientName)).size;
+  const totalZones = new Set(periodCases.map((entry) => entry.zone)).size;
 
-    return {
-      title: "Reporte general",
-      filename: "kingestion-reporte-general.pdf",
+  const reportPayload = useMemo(
+    () => ({
+      title: `Reporte RMA Kingston - ${period.label}`,
+      filename: `kingestion-reporte-${period.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf`,
       lines: [
-        ...reportsSnapshot.throughput.map((entry) => `${entry.label}: ${entry.value}`),
+        `Periodo: ${period.label}`,
         "",
-        "Carga por responsable:",
-        ...dashboardSnapshot.ownerLoad.map(
-          (entry) => `${entry.owner} (${getTeamLabel(entry.team)}): ${entry.count} casos`
+        "Fecha | Cliente | Nro de caso | SKU fallado | SKU reemplazo | Cantidad | Zona",
+        ...(
+          periodCases.length > 0
+            ? periodCases.map((entry) =>
+                [
+                  formatDate(entry.openedAt),
+                  sanitizePdfCell(entry.clientName),
+                  sanitizePdfCell(entry.internalNumber),
+                  sanitizePdfCell(entry.sku),
+                  sanitizePdfCell(entry.replacementSku),
+                  sanitizePdfCell(entry.quantity),
+                  sanitizePdfCell(entry.zone)
+                ].join(" | ")
+              )
+            : ["Sin casos para el periodo seleccionado."]
         )
       ]
-    };
-  }, [auditLog, dashboardSnapshot.byStatus, dashboardSnapshot.ownerLoad, reportsSnapshot.byClient, reportsSnapshot.bySku, reportsSnapshot.throughput, view]);
+    }),
+    [period.label, periodCases]
+  );
 
   const handleDownload = () => {
-    downloadPdfReport(reportPayload);
-    void recordReportDownload(reportPayload.title);
+    void downloadPdfReport(reportPayload).then(() => {
+      void recordReportDownload(reportPayload.title);
+    });
   };
 
   if (!canAccessModule("reports")) {
@@ -99,145 +182,149 @@ export function ReportsModule() {
 
   return (
     <div className="workspace-page">
-      <ModuleSubnav
-        items={[
-          { href: "/reports?view=general", label: "General", active: view === "general" },
-          { href: "/reports?view=estados", label: "Por estado", active: view === "estados" },
-          { href: "/reports?view=clientes", label: "Por cliente", active: view === "clientes" },
-          { href: "/reports?view=sku", label: "Por SKU", active: view === "sku" },
-          { href: "/reports?view=auditoria", label: "Auditoria", active: view === "auditoria" }
-        ]}
-        aside={
-          <div className="workspace-inline-actions">
-            <button className="workspace-button" type="button" onClick={handleDownload}>
-              Descargar PDF
-            </button>
-            <Link className="workspace-button-secondary" href="/cases">
-              Ver casos
-            </Link>
-          </div>
-        }
-      />
-
-      <section className="workspace-grid-4">
-        {reportsSnapshot.throughput.map((metric) => (
-          <MetricCard key={metric.label} label={metric.label} value={formatCount(metric.value)} hint={metric.hint} />
-        ))}
+      <section className="workspace-page-header-row">
+        <div>
+          <div className="workspace-kicker">Reportes</div>
+          <h1 className="workspace-title">Informe operativo por periodo</h1>
+          <p className="workspace-subtitle">
+            Reportes mensuales, trimestrales, semestrales o anuales con la informacion operativa solicitada.
+          </p>
+        </div>
+        <div className="workspace-inline-actions">
+          <button className="workspace-button" type="button" onClick={handleDownload}>
+            Descargar PDF
+          </button>
+          <Link className="workspace-button-secondary" href="/cases">
+            Ver casos
+          </Link>
+        </div>
       </section>
 
-      {view === "general" ? (
-        <SectionPanel title="Resumen general" description="Lectura consolidada para entender carga y salida del flujo.">
-          <div className="workspace-grid-2">
-            {dashboardSnapshot.ownerLoad.map((entry) => (
-              <article key={entry.owner} className="workspace-list-card">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-base font-semibold text-white">{entry.owner}</div>
-                    <div className="mt-1 text-sm text-white/58">{getTeamLabel(entry.team)}</div>
-                  </div>
-                  <div className="text-2xl font-[var(--font-display)] tracking-[-0.06em] text-white">
-                    {formatCount(entry.count)}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </SectionPanel>
-      ) : null}
+      <SectionPanel title="Periodo del reporte" description="Elegí el rango que queres incluir en el informe.">
+        <div className="workspace-form-grid">
+          <label className="workspace-label">
+            <span>Tipo</span>
+            <select
+              className="workspace-select"
+              value={periodMode}
+              onChange={(event) => setPeriodMode(event.target.value as ReportPeriodMode)}
+            >
+              <option value="monthly">Mensual</option>
+              <option value="quarterly">Trimestre</option>
+              <option value="semester">Semestre</option>
+              <option value="yearly">Año</option>
+            </select>
+          </label>
 
-      {view === "estados" ? (
-        <SectionPanel title="Distribucion por estado" description="Cuantos casos hay en cada etapa del flujo actual.">
-          <div className="space-y-4">
-            {dashboardSnapshot.byStatus.map((entry) => (
-              <article key={entry.status}>
-                <div className="flex items-center justify-between text-sm text-white/68">
-                  <span>{entry.status}</span>
-                  <span>{formatCount(entry.count)}</span>
-                </div>
-                <div className="mt-2 h-2 rounded-full bg-white/6">
-                  <div
-                    className="h-2 rounded-full bg-[linear-gradient(90deg,#38bdf8_0%,#4ade80_100%)]"
-                    style={{ width: `${(entry.count / maxStatus) * 100}%` }}
-                  />
-                </div>
-              </article>
-            ))}
-          </div>
-        </SectionPanel>
-      ) : null}
+          <label className="workspace-label">
+            <span>Año</span>
+            <select
+              className="workspace-select"
+              value={selectedYear}
+              onChange={(event) => setSelectedYear(Number(event.target.value))}
+            >
+              {yearOptions.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </label>
 
-      {view === "clientes" ? (
-        <SectionPanel title="Volumen por cliente" description="Clientes con mayor cantidad de casos en el sistema.">
-          <div className="space-y-4">
-            {reportsSnapshot.byClient.map((entry) => (
-              <article key={entry.label}>
-                <div className="flex items-center justify-between text-sm text-white/68">
-                  <span>{entry.label}</span>
-                  <span>{formatCount(entry.value)}</span>
-                </div>
-                <div className="mt-2 h-2 rounded-full bg-white/6">
-                  <div
-                    className="h-2 rounded-full bg-[linear-gradient(90deg,#38bdf8_0%,#0ea5e9_100%)]"
-                    style={{ width: `${(entry.value / maxClient) * 100}%` }}
-                  />
-                </div>
-              </article>
-            ))}
-          </div>
-        </SectionPanel>
-      ) : null}
+          {periodMode === "monthly" ? (
+            <label className="workspace-label">
+              <span>Mes</span>
+              <select
+                className="workspace-select"
+                value={selectedMonth}
+                onChange={(event) => setSelectedMonth(Number(event.target.value))}
+              >
+                {MONTHS.map((month, index) => (
+                  <option key={month} value={index}>
+                    {month}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
-      {view === "sku" ? (
-        <SectionPanel title="Volumen por SKU" description="SKU con mayor cantidad de unidades involucradas.">
-          <div className="space-y-4">
-            {reportsSnapshot.bySku.map((entry) => (
-              <article key={entry.label}>
-                <div className="flex items-center justify-between text-sm text-white/68">
-                  <span>{entry.label}</span>
-                  <span>{formatCount(entry.value)}</span>
-                </div>
-                <div className="mt-2 h-2 rounded-full bg-white/6">
-                  <div
-                    className="h-2 rounded-full bg-[linear-gradient(90deg,#4ade80_0%,#22c55e_100%)]"
-                    style={{ width: `${(entry.value / maxSku) * 100}%` }}
-                  />
-                </div>
-              </article>
-            ))}
-          </div>
-        </SectionPanel>
-      ) : null}
+          {periodMode === "quarterly" ? (
+            <label className="workspace-label">
+              <span>Trimestre</span>
+              <select
+                className="workspace-select"
+                value={selectedQuarter}
+                onChange={(event) => setSelectedQuarter(Number(event.target.value))}
+              >
+                {QUARTERS.map((quarter) => (
+                  <option key={quarter.value} value={quarter.value}>
+                    {quarter.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
-      {view === "auditoria" ? (
-        <SectionPanel title="Auditoria de interacciones" description="Registro de quien hizo que y en que momento.">
-          {auditLog.length === 0 ? (
-            <div className="workspace-empty">Todavia no hay acciones registradas para exportar.</div>
-          ) : (
-            <div className="workspace-table-wrap">
-              <table className="workspace-table">
-                <thead>
-                  <tr>
-                    <th>Usuario</th>
-                    <th>Accion</th>
-                    <th>Detalle</th>
-                    <th>Fecha</th>
+          {periodMode === "semester" ? (
+            <label className="workspace-label">
+              <span>Semestre</span>
+              <select
+                className="workspace-select"
+                value={selectedSemester}
+                onChange={(event) => setSelectedSemester(Number(event.target.value))}
+              >
+                {SEMESTERS.map((semester) => (
+                  <option key={semester.value} value={semester.value}>
+                    {semester.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+      </SectionPanel>
+
+      <section className="workspace-grid-4">
+        <MetricCard label="Casos" value={formatCount(periodCases.length)} hint={period.label} />
+        <MetricCard label="Unidades" value={formatCount(totalUnits)} hint="Cantidad total informada" />
+        <MetricCard label="Clientes" value={formatCount(totalClients)} hint="Clientes unicos del periodo" />
+        <MetricCard label="Zonas" value={formatCount(totalZones)} hint="Zonas con actividad" />
+      </section>
+
+      <SectionPanel title="Detalle del reporte" description="La descarga PDF usa estas mismas columnas.">
+        {periodCases.length === 0 ? (
+          <div className="workspace-empty">No hay casos para el periodo seleccionado.</div>
+        ) : (
+          <div className="workspace-table-wrap">
+            <table className="workspace-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Cliente</th>
+                  <th>Nro de caso</th>
+                  <th>SKU fallado</th>
+                  <th>SKU reemplazo</th>
+                  <th>Cantidad</th>
+                  <th>Zona</th>
+                </tr>
+              </thead>
+              <tbody>
+                {periodCases.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{formatDate(entry.openedAt)}</td>
+                    <td>{entry.clientName}</td>
+                    <td>{entry.internalNumber}</td>
+                    <td>{entry.sku}</td>
+                    <td>{entry.replacementSku || "-"}</td>
+                    <td>{formatCount(entry.quantity)}</td>
+                    <td>{entry.zone}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {auditLog.slice(0, 30).map((entry) => (
-                    <tr key={entry.id}>
-                      <td>{entry.actorName}</td>
-                      <td>{getAuditActionLabel(entry.action)}</td>
-                      <td>{entry.detail}</td>
-                      <td>{new Date(entry.createdAt).toLocaleString("es-AR")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </SectionPanel>
-      ) : null}
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionPanel>
     </div>
   );
 }

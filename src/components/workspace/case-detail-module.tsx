@@ -5,12 +5,16 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 import { CaseStatusSelect } from "@/components/workspace/case-status-select";
-import { EventTimeline } from "@/components/workspace/event-timeline";
 import { ModuleSubnav } from "@/components/workspace/module-subnav";
 import { SectionPanel } from "@/components/workspace/section-panel";
 import { TaskList } from "@/components/workspace/task-list";
 import { useKingestion } from "@/components/workspace/kingestion-provider";
 import { openAttachmentPreview } from "@/lib/kingston/attachment-viewer";
+import {
+  CLIENT_ATTACHMENT_MAX_BYTES,
+  formatClientAttachmentLimit,
+  uploadCaseAttachmentFile
+} from "@/lib/kingston/client-attachments";
 import {
   buildCaseAddress,
   formatDateTime,
@@ -27,6 +31,19 @@ import {
 import type { CaseAttachment } from "@/lib/kingston/types";
 
 type DetailTab = "resumen" | "cliente" | "producto" | "operacion" | "historial";
+
+type CaseEmailHistoryItem = {
+  id: string;
+  to: string[];
+  subject: string;
+  textPreview: string;
+  status: "pending" | "sending" | "sent" | "error" | "failed";
+  source: string;
+  mailboxUid: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  sentAt: string | null;
+};
 
 function getTab(value: string | null): DetailTab {
   switch (value) {
@@ -70,17 +87,41 @@ function inferAttachmentKind(file: File): CaseAttachment["kind"] {
   return "proof";
 }
 
-async function getPreviewUrl(file: File) {
-  if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
-    return undefined;
+function getAttachmentDownloadUrl(previewUrl: string) {
+  if (previewUrl.startsWith("/api/case-attachments/")) {
+    const separator = previewUrl.includes("?") ? "&" : "?";
+    return `${previewUrl}${separator}download=1`;
   }
 
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("No pude leer el archivo."));
-    reader.readAsDataURL(file);
-  });
+  return previewUrl;
+}
+
+function getEmailStatusLabel(status: CaseEmailHistoryItem["status"]) {
+  switch (status) {
+    case "sent":
+      return "Enviado";
+    case "sending":
+      return "Enviando";
+    case "error":
+      return "Error";
+    case "failed":
+      return "Fallido";
+    default:
+      return "Pendiente";
+  }
+}
+
+function getEmailSourceLabel(source: string) {
+  switch (source) {
+    case "status-notification":
+      return "Aviso por estado";
+    case "mail-reply":
+      return "Respuesta automatica";
+    case "new-case-customer":
+      return "Alta de caso";
+    default:
+      return source || "Correo";
+  }
 }
 
 export function CaseDetailModule() {
@@ -94,11 +135,12 @@ export function CaseDetailModule() {
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [replacementSkuDraft, setReplacementSkuDraft] = useState("");
   const [replacementSuccess, setReplacementSuccess] = useState<string | null>(null);
+  const [emailHistory, setEmailHistory] = useState<CaseEmailHistoryItem[]>([]);
+  const [emailHistoryError, setEmailHistoryError] = useState<string | null>(null);
+  const [isLoadingEmailHistory, setIsLoadingEmailHistory] = useState(false);
   const {
     findCaseById,
-    activeOwners,
     activeOwner,
-    assignCaseOwner,
     updateCaseStatus,
     addCaseAttachment,
     removeCaseAttachment,
@@ -106,7 +148,6 @@ export function CaseDetailModule() {
     archiveCase,
     restoreCase,
     deleteCase,
-    auditLog,
     canArchiveCases,
     canDeleteCases,
     canAccessModule,
@@ -124,6 +165,48 @@ export function CaseDetailModule() {
   useEffect(() => {
     setReplacementSkuDraft(entry?.replacementSku ?? "");
   }, [entry?.replacementSku]);
+
+  useEffect(() => {
+    if (!entry || tab !== "historial") return;
+
+    let cancelled = false;
+
+    const loadEmailHistory = async () => {
+      setIsLoadingEmailHistory(true);
+      setEmailHistoryError(null);
+
+      try {
+        const response = await fetch(`/api/automation/emails?caseId=${encodeURIComponent(entry.id)}&limit=120`, {
+          cache: "no-store",
+          credentials: "include"
+        });
+
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          throw new Error(payload?.message ?? "No pude cargar la cadena de correos.");
+        }
+
+        const payload = (await response.json()) as { items: CaseEmailHistoryItem[] };
+        if (!cancelled) {
+          setEmailHistory(payload.items);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setEmailHistoryError(error instanceof Error ? error.message : "No pude cargar la cadena de correos.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingEmailHistory(false);
+        }
+      }
+    };
+
+    void loadEmailHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [entry, tab]);
 
   if (!entry) {
     return (
@@ -154,6 +237,11 @@ export function CaseDetailModule() {
   }
 
   const canManageCases = canManageModule("open-cases") && !isArchived;
+  const isManualStatusRestricted =
+    activeOwner.team !== "ADMIN" &&
+    entry.zone === "Interior / Gran Buenos Aires" &&
+    entry.externalStatus === "Producto enviado" &&
+    !entry.logistics.guideNumber;
 
   const taskItems = entry.tasks.map((task) => ({
     ...task,
@@ -161,10 +249,12 @@ export function CaseDetailModule() {
     caseNumber: entry.internalNumber,
     clientName: entry.clientName
   }));
-  const caseAudit = auditLog.filter((item) => item.entityType === "case" && item.entityId === entry.id).slice(0, 10);
   const banking = entry.banking;
   const latestProofAttachment =
     entry.attachments.find((attachment) => attachment.kind === "proof" || attachment.kind === "photo") ?? null;
+  const inboundEmailComments = entry.comments.filter((comment) =>
+    comment.body.trim().toLowerCase().startsWith("correo recibido en bandeja kingston")
+  );
 
   const handleAttachmentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -177,21 +267,21 @@ export function CaseDetailModule() {
     setAttachmentError(null);
     setAttachmentSuccess(null);
 
-    if (file.size > 2 * 1024 * 1024) {
-      setAttachmentError("El archivo no puede superar los 2 MB para asegurar la sincronizacion entre equipos.");
+    if (file.size > CLIENT_ATTACHMENT_MAX_BYTES) {
+      setAttachmentError(`El archivo no puede superar los ${formatClientAttachmentLimit()}.`);
       return;
     }
 
     setIsUploadingAttachment(true);
 
     try {
-      const previewUrl = await getPreviewUrl(file);
+      const uploadedFile = await uploadCaseAttachmentFile(file, entry.id);
       const saved = await addCaseAttachment(entry.id, {
-        name: file.name,
+        name: uploadedFile.name,
         kind: inferAttachmentKind(file),
-        sizeLabel: formatUploadSize(file.size),
-        mimeType: file.type,
-        previewUrl
+        sizeLabel: uploadedFile.sizeLabel || formatUploadSize(file.size),
+        mimeType: uploadedFile.mimeType || file.type,
+        previewUrl: uploadedFile.previewUrl
       });
 
       if (!saved) {
@@ -309,8 +399,11 @@ export function CaseDetailModule() {
               value={entry.externalStatus}
               zone={entry.zone}
               onChange={(status) => updateCaseStatus(entry.id, status)}
-              disabled={!canManageCases}
+              disabled={!canManageCases || isManualStatusRestricted}
             />
+            {isManualStatusRestricted ? (
+              <small className="workspace-field-hint">Solo el administrador puede avanzar manualmente sin numero de guia.</small>
+            ) : null}
           </label>
         }
       />
@@ -384,7 +477,7 @@ export function CaseDetailModule() {
             </dl>
           </SectionPanel>
 
-          <SectionPanel title="Gestion del caso" description="Asignacion y acciones administrativas.">
+          <SectionPanel title="Gestion del caso" description="Asignacion automatica y acciones administrativas.">
             <div className="workspace-inline-form">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/6 text-sm font-semibold text-white">
@@ -396,22 +489,10 @@ export function CaseDetailModule() {
                 </div>
               </div>
 
-              <label className="workspace-label">
-                <span>Responsable actual</span>
-                <select
-                  className="workspace-select"
-                  value={entry.owner}
-                  onChange={(event) => assignCaseOwner(entry.id, event.target.value)}
-                  disabled={!canManageCases}
-                >
-                  {activeOwners.map((owner) => (
-                    <option key={owner.id} value={owner.name}>
-                      {owner.name}
-                    </option>
-                  ))}
-                  <option value="Sin asignar">Sin asignar</option>
-                </select>
-              </label>
+              <div className="workspace-empty">
+                El responsable se asigna automaticamente segun estado, zona y bandeja operativa. Si cambia la etapa del
+                caso, Kingestion recalcula el sector responsable y deja registro en auditoria.
+              </div>
 
               {(attachmentError || attachmentSuccess) ? (
                 <div className="workspace-empty">{attachmentError ?? attachmentSuccess}</div>
@@ -708,6 +789,47 @@ export function CaseDetailModule() {
       {tab === "historial" ? (
         <>
           <div className="workspace-grid-2">
+            <SectionPanel title="Cadena de correos" description="Correos recibidos y enviados vinculados a este caso.">
+              <div className="space-y-3">
+                {isLoadingEmailHistory ? <div className="workspace-empty">Cargando cadena de correos...</div> : null}
+                {emailHistoryError ? <div className="workspace-empty">{emailHistoryError}</div> : null}
+
+                {inboundEmailComments.map((comment) => (
+                  <article key={comment.id} className="workspace-list-card">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-white">Correo recibido</div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+                        {formatDateTime(comment.createdAt)}
+                      </div>
+                    </div>
+                    <p className="mt-3 whitespace-pre-line text-sm leading-7 text-white/68">{comment.body}</p>
+                  </article>
+                ))}
+
+                {emailHistory.map((email) => (
+                  <article key={email.id} className="workspace-list-card">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-white">{email.subject}</div>
+                        <div className="mt-1 text-xs uppercase tracking-[0.16em] text-white/40">
+                          {getEmailSourceLabel(email.source)} / {getEmailStatusLabel(email.status)}
+                        </div>
+                      </div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-white/40">
+                        {formatDateTime(email.sentAt ?? email.updatedAt ?? email.createdAt ?? entry.updatedAt)}
+                      </div>
+                    </div>
+                    <div className="mt-3 text-sm text-white/58">Para: {email.to.join(", ")}</div>
+                    <p className="mt-2 text-sm leading-7 text-white/68">{email.textPreview}</p>
+                  </article>
+                ))}
+
+                {!isLoadingEmailHistory && !emailHistoryError && inboundEmailComments.length === 0 && emailHistory.length === 0 ? (
+                  <div className="workspace-empty">Todavia no hay correos vinculados a este caso.</div>
+                ) : null}
+              </div>
+            </SectionPanel>
+
             <SectionPanel title="Adjuntos del caso" description="Ver, agregar o eliminar archivos segun la necesidad operativa.">
               <div className="workspace-inline-form">
                 <label className="workspace-label">
@@ -746,14 +868,22 @@ export function CaseDetailModule() {
                           </button>
                         </div>
                         {attachment.previewUrl ? (
-                          <div className="mt-3">
-                            <button
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <a
                               className="workspace-link-button"
-                              type="button"
-                              onClick={() => void handleOpenAttachment(attachment.previewUrl!)}
+                              href={attachment.previewUrl}
+                              target="_blank"
+                              rel="noreferrer"
                             >
                               Abrir adjunto
-                            </button>
+                            </a>
+                            <a
+                              className="workspace-link-button"
+                              href={getAttachmentDownloadUrl(attachment.previewUrl)}
+                              download={attachment.name}
+                            >
+                              Descargar
+                            </a>
                           </div>
                         ) : null}
                         {attachment.previewUrl ? (
@@ -777,33 +907,7 @@ export function CaseDetailModule() {
               </div>
             </SectionPanel>
 
-            <SectionPanel title="Comentarios y auditoria" description="Notas internas y acciones recientes sobre el caso.">
-              <div className="space-y-3">
-                {entry.comments.map((comment) => (
-                  <article key={comment.id} className="workspace-list-card">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-white">{comment.author}</div>
-                      <div className="text-xs uppercase tracking-[0.16em] text-white/40">
-                        {comment.internal ? "Interno" : "Externo"} / {formatDateTime(comment.createdAt)}
-                      </div>
-                    </div>
-                    <p className="mt-3 text-sm leading-7 text-white/68">{comment.body}</p>
-                  </article>
-                ))}
-                {caseAudit.map((event) => (
-                  <article key={event.id} className="workspace-list-card">
-                    <div className="text-xs uppercase tracking-[0.16em] text-white/40">{formatDateTime(event.createdAt)}</div>
-                    <div className="mt-2 text-sm font-semibold text-white">{event.actorName}</div>
-                    <p className="mt-2 text-sm leading-7 text-white/68">{event.detail}</p>
-                  </article>
-                ))}
-              </div>
-            </SectionPanel>
           </div>
-
-          <SectionPanel title="Timeline del caso" description="Secuencia completa de eventos y movimientos.">
-            <EventTimeline events={entry.events} />
-          </SectionPanel>
         </>
       ) : null}
     </div>

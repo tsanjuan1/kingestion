@@ -24,7 +24,8 @@ function getToneClass(status: ExternalStatus) {
 }
 
 export function CaseStatusSelect({ value, zone, onChange, disabled = false }: CaseStatusSelectProps) {
-  const statusOptions = getAllowedStatusesForZone(zone);
+  const visibleOptions = getAllowedStatusesForZone(zone);
+  const statusOptions = visibleOptions.includes(value) ? visibleOptions : [value, ...visibleOptions];
 
   return (
     <select

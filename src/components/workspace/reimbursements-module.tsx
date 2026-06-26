@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 
 import { SectionPanel } from "@/components/workspace/section-panel";
@@ -13,7 +14,18 @@ import {
 } from "@/lib/kingston/helpers";
 
 export function ReimbursementsModule() {
-  const { cases, canManageReimbursements, completeReimbursement, activeOwner, canAccessModule } = useKingestion();
+  const {
+    cases,
+    canManageReimbursements,
+    markReimbursementInProcess,
+    completeReimbursement,
+    requestReimbursementMissingData,
+    activeOwner,
+    canAccessModule
+  } = useKingestion();
+  const [missingDataRequests, setMissingDataRequests] = useState<Record<string, "idle" | "sending" | "sent" | "error">>(
+    {}
+  );
   const pendingCases = getPendingReimbursements(cases).toSorted(
     (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
   );
@@ -27,6 +39,12 @@ export function ReimbursementsModule() {
       </div>
     );
   }
+
+  const handleRequestMissingData = async (caseId: string) => {
+    setMissingDataRequests((current) => ({ ...current, [caseId]: "sending" }));
+    const ok = await requestReimbursementMissingData(caseId);
+    setMissingDataRequests((current) => ({ ...current, [caseId]: ok ? "sent" : "error" }));
+  };
 
   return (
     <div className="workspace-page">
@@ -98,6 +116,33 @@ export function ReimbursementsModule() {
                         Ver adjuntos
                       </Link>
                       <button
+                        className="workspace-button-secondary"
+                        type="button"
+                        onClick={() => void handleRequestMissingData(entry.id)}
+                        disabled={
+                          !canManageReimbursements ||
+                          missingDataRequests[entry.id] === "sending" ||
+                          missingDataRequests[entry.id] === "sent"
+                        }
+                        title="Envia un unico correo al cliente, con copia a Debora, pidiendo los datos faltantes detectados."
+                      >
+                        {missingDataRequests[entry.id] === "sending"
+                          ? "Solicitando..."
+                          : missingDataRequests[entry.id] === "sent"
+                            ? "Datos solicitados"
+                            : "Datos faltantes"}
+                      </button>
+                      <button
+                        className={`workspace-button-secondary ${
+                          entry.logistics.reimbursementState === "In process" ? "workspace-button-process-active" : ""
+                        }`}
+                        type="button"
+                        onClick={() => markReimbursementInProcess(entry.id)}
+                        disabled={!canManageReimbursements || entry.logistics.reimbursementState === "In process"}
+                      >
+                        Reintegro en proceso
+                      </button>
+                      <button
                         className="workspace-button"
                         type="button"
                         onClick={() => completeReimbursement(entry.id)}
@@ -106,6 +151,9 @@ export function ReimbursementsModule() {
                         Marcar reintegro completado
                       </button>
                     </div>
+                    {missingDataRequests[entry.id] === "error" ? (
+                      <p className="workspace-case-meta mt-3">No pude solicitar los datos. Reintenta en unos segundos.</p>
+                    ) : null}
                   </div>
 
                   <aside className="workspace-reimbursement-proof">

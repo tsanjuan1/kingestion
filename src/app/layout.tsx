@@ -3,7 +3,7 @@ import { Outfit, Sora } from "next/font/google";
 
 import "@/app/globals.css";
 
-const brandMarkIcon = "/kingestion-mark.png?v=20260422";
+const brandMarkIcon = "/kingestion-mark-v3.svg?v=20260514";
 
 const sora = Sora({
   subsets: ["latin"],

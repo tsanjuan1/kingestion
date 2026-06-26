@@ -1,5 +1,5 @@
 {
-  "name": "Kingestion 01 - Ingesta de autorizaciones Kingston",
+  "name": "PILOTO | Kingestion 01 - Ingesta de autorizaciones Kingston",
   "nodes": [
     {
       "id": "1",
@@ -14,7 +14,16 @@
         "postProcessAction": "nothing",
         "downloadAttachments": true,
         "options": {
-          "customEmailConfig": "=[\n  \"UNSEEN\",\n  [\"FROM\", \"rma@kingston.com\"]\n]"
+          "customEmailConfig": "=[[\"SUBJECT\", \"Kingston\"]]",
+          "trackLastMessageId": true
+        },
+        "mailbox": "Casos kingston",
+        "format": "resolved"
+      },
+      "credentials": {
+        "imap": {
+          "id": "Og1HWGISAE8W0C6y",
+          "name": "Kingestion IMAP Innovexa"
         }
       }
     },
@@ -39,7 +48,7 @@
         120
       ],
       "parameters": {
-        "jsCode": "return [{\n  json: {\n    from: 'rma@kingston.com',\n    subject: 'Autorizacion RMA KS-998877 - Micro Delta SA',\n    text: 'Kingston autoriza cambio de 12 modulos KF432C16BB/16 para Micro Delta SA. Contacto Nadia Ferreyra, email nadia.ferreyra@microdelta.com.ar, telefono +54 9 351 555-1200, direccion Av. Colon 4132 Piso 3, Cordoba Capital. Zona Interior / Gran Buenos Aires. Solicitar reintegro y envio del producto fallado.',\n    receivedAt: new Date().toISOString(),\n    attachments: []\n  }\n}];"
+        "jsCode": "return [{\n  json: {\n    from: 'Tomas Sanjuan <comercial2@anyx.com.ar>',\n    subject: 'Kingston (00648811) - Autorizacion Para Servicio de Garantia',\n    text: 'Hola,\\n\\nPor favor, contacte al cliente para los siguientes pasos para recibir su reemplazo. Gracias.\\n\\nCaso#: 00648811\\nParte#: (1) SA400S37/240G\\nReemplazo: (1) SA400S37/240G\\nNotas:\\n\\nNombre: Leonardo Arias\\nCUIL#: N/A\\nDirección: Calle 13 3408\\nBarrio: -----\\nCiudad: Berazategui\\nEstado: Buenos Aires\\nPais: Argentina\\nPostal: 1884\\nTeléfono: 1123916076\\nCorreo: tomassanjuan@outlook.com',\n    html: '',\n    receivedAt: new Date().toISOString(),\n    attachments: []\n  }\n}];"
       }
     },
     {
@@ -52,37 +61,38 @@
         -20
       ],
       "parameters": {
-        "jsCode": "const item = $input.first();\nconst json = item.json ?? {};\nconst attachments = [];\n\nfor (const [binaryKey, binaryFile] of Object.entries(item.binary ?? {})) {\n  const buffer = await this.helpers.getBinaryDataBuffer(0, binaryKey);\n  attachments.push({\n    name: binaryFile.fileName ?? binaryKey,\n    sizeLabel: binaryFile.fileSize ?? 'Adjunto',\n    mimeType: binaryFile.mimeType ?? 'application/octet-stream',\n    previewUrl: `data:${binaryFile.mimeType ?? 'application/octet-stream'};base64,${buffer.toString('base64')}`\n  });\n}\n\nreturn [{\n  json: {\n    from: json.from ?? json.headers?.from ?? '',\n    subject: json.subject ?? '',\n    text: json.text ?? json.plainText ?? json.html ?? '',\n    html: json.html ?? '',\n    receivedAt: json.receivedAt ?? json.date ?? new Date().toISOString(),\n    attachments\n  }\n}];"
+        "jsCode": "const item = $input.first();\nconst json = item.json ?? {};\nconst attachments = [];\n\nfor (const [binaryKey, binaryFile] of Object.entries(item.binary ?? {})) {\n  const buffer = await this.helpers.getBinaryDataBuffer(0, binaryKey);\n  attachments.push({\n    name: binaryFile.fileName ?? binaryKey,\n    sizeLabel: binaryFile.fileSize ?? 'Adjunto',\n    mimeType: binaryFile.mimeType ?? 'application/octet-stream',\n    previewUrl: `data:${binaryFile.mimeType ?? 'application/octet-stream'};base64,${buffer.toString('base64')}`\n  });\n}\n\nconst extractEmail = (value) => {\n  const raw = String(value ?? '').trim();\n  if (!raw) return '';\n  const match = raw.match(/<([^>]+)>/);\n  return (match?.[1] ?? raw).trim().toLowerCase();\n};\n\nconst htmlToText = (value) =>\n  String(value ?? '')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/<\\/p>/gi, '\\n')\n    .replace(/<\\/div>/gi, '\\n')\n    .replace(/<\\/tr>/gi, '\\n')\n    .replace(/<li>/gi, '- ')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/gi, ' ')\n    .replace(/&amp;/gi, '&')\n    .replace(/&lt;/gi, '<')\n    .replace(/&gt;/gi, '>')\n    .replace(/&quot;/gi, '\"')\n    .replace(/&#39;/gi, \"'\")\n    .replace(/\\r/g, '')\n    .replace(/[ \\t]+\\n/g, '\\n')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .replace(/ {2,}/g, ' ')\n    .trim();\n\nconst fromRaw = json.from ?? json.headers?.from ?? '';\nconst fromEmail = extractEmail(fromRaw);\nconst subject = String(json.subject ?? '');\nconst plainText = String(json.text ?? json.plainText ?? '').trim();\nconst html = String(json.html ?? '');\nconst htmlText = htmlToText(html);\nconst text = [plainText, htmlText].filter(Boolean).sort((a, b) => b.length - a.length)[0] ?? '';\nconst combined = `${subject}\\n${text}`.toLowerCase();\n\nconst isPilotSelfMail = fromEmail === 'tsanjuan@innovexa.com.ar';\nconst looksLikeKingstonFlow = combined.includes('kingston') || fromEmail.endsWith('@kingston.com');\n\nif (isPilotSelfMail || !looksLikeKingstonFlow) {\n  return [];\n}\n\nreturn [{\n  json: {\n    from: fromRaw,\n    fromEmail,\n    subject,\n    text,\n    html,\n    receivedAt: json.receivedAt ?? json.date ?? new Date().toISOString(),\n    attachments\n  }\n}];"
       }
     },
     {
       "id": "5",
       "name": "IA interpreta autorizacion",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.8,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
       "position": [
         -220,
         -20
       ],
       "parameters": {
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-5-mini",
-          "mode": "list",
-          "cachedResultName": "GPT-5-MINI"
-        },
-        "messages": {
-          "values": [
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "content": "=Sos un analista operativo de ANYX para RMA Kingston.\n\nInterpretá el siguiente correo y devolvé SOLO JSON valido con este schema:\n{\n  \"kingstonNumber\": \"string\",\n  \"clientName\": \"string\",\n  \"contactName\": \"string\",\n  \"contactEmail\": \"string\",\n  \"contactPhone\": \"string\",\n  \"zone\": \"Interior / Gran Buenos Aires\" | \"Capital / AMBA\",\n  \"deliveryMode\": \"Dispatch\" | \"Pickup\",\n  \"priority\": \"Low\" | \"Medium\" | \"High\" | \"Critical\",\n  \"address\": \"string\",\n  \"province\": \"string\",\n  \"city\": \"string\",\n  \"sku\": \"string\",\n  \"quantity\": number,\n  \"productDescription\": \"string\",\n  \"failureDescription\": \"string\",\n  \"nextAction\": \"string\",\n  \"observations\": \"string\",\n  \"origin\": \"Kingston email\",\n  \"externalStatus\": \"Informado\",\n  \"banking\": {\n    \"bankName\": \"\",\n    \"accountHolder\": \"\",\n    \"cuit\": \"\",\n    \"cbu\": \"\",\n    \"alias\": \"\",\n    \"accountNumber\": \"\"\n  }\n}\n\nSi falta un dato, completalo con la mejor inferencia operativa razonable y dejalo aclarado dentro de observations.\n\nAsunto:\n{{ $json.subject }}\n\nCorreo:\n{{ $json.text }}"
+              "name": "Authorization",
+              "value": "Bearer {{$env.GROQ_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
             }
           ]
         },
-        "jsonOutput": true,
-        "options": {
-          "temperature": 0.1,
-          "maxTokens": 1800
-        }
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'llama-3.3-70b-versatile',\n  temperature: 0,\n  max_tokens: 1600,\n  messages: [\n    {\n      role: 'system',\n      content: 'Sos un analista operativo de ANYX para RMA Kingston. Debes responder SOLO con JSON válido, sin markdown ni texto extra.'\n    },\n    {\n      role: 'user',\n      content: `Interpretá el siguiente correo y devolvé SOLO JSON valido con este schema:\n{\n  \"kingstonNumber\": \"string\",\n  \"clientName\": \"string\",\n  \"contactName\": \"string\",\n  \"contactEmail\": \"string\",\n  \"contactPhone\": \"string\",\n  \"zone\": \"Interior / Gran Buenos Aires\" | \"Capital / AMBA\",\n  \"deliveryMode\": \"Dispatch\" | \"Pickup\",\n  \"priority\": \"Low\" | \"Medium\" | \"High\" | \"Critical\",\n  \"address\": \"string\",\n  \"province\": \"string\",\n  \"city\": \"string\",\n  \"sku\": \"string\",\n  \"quantity\": number,\n  \"productDescription\": \"string\",\n  \"failureDescription\": \"string\",\n  \"nextAction\": \"string\",\n  \"observations\": \"string\",\n  \"origin\": \"Kingston email\",\n  \"externalStatus\": \"Informado\",\n  \"mailIntent\": \"new_case\" | \"follow_up\" | \"payment_proof\" | \"mixed\",\n  \"containsPaymentProof\": boolean,\n  \"proofReason\": \"string\",\n  \"banking\": {\n    \"bankName\": \"\",\n    \"accountHolder\": \"\",\n    \"cuit\": \"\",\n    \"cbu\": \"\",\n    \"alias\": \"\",\n    \"accountNumber\": \"\"\n  }\n}\n\nReglas obligatorias:\n- zone debe ser exactamente \"Interior / Gran Buenos Aires\" o \"Capital / AMBA\"\n- deliveryMode debe ser exactamente \"Dispatch\" o \"Pickup\"\n- externalStatus debe ser exactamente \"Informado\"\n- mailIntent debe reflejar si es una autorización nueva, un seguimiento, un correo con comprobante de pago/reintegro o una mezcla.\n- Si el correo o el adjunto parecen ser un comprobante de pago, un ticket del correo o un respaldo para reintegro, containsPaymentProof debe ser true y proofReason debe explicarlo.\n- Si falta un dato, completalo con la mejor inferencia operativa razonable y acláralo dentro de observations.\n\nAdjuntos detectados:\n${($json.attachments ?? []).map((attachment) => attachment.name).join(', ') || 'Sin adjuntos'}\n\nAsunto:\n${$json.subject}\n\nCorreo:\n${$json.text}`\n    }\n  ]\n}) }}",
+        "options": {}
       }
     },
     {
@@ -95,7 +105,7 @@
         -20
       ],
       "parameters": {
-        "jsCode": "const emailItem = $('Normalizar correo Kingston').first().json;\nconst aiItem = $input.first().json;\nconst raw =\n  aiItem.json ??\n  aiItem.output ??\n  aiItem.response ??\n  aiItem.result ??\n  aiItem.message?.content ??\n  aiItem.text ??\n  aiItem.content ??\n  aiItem;\n\nlet parsed = raw;\nif (typeof raw === 'string') {\n  const cleaned = raw.replace(/^```json|^```|```$/gm, '').trim();\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(match ? match[0] : cleaned);\n}\n\nreturn [{\n  json: {\n    ...parsed,\n    origin: 'Kingston email',\n    externalStatus: 'Informado',\n    attachments: emailItem.attachments ?? [],\n    _emailContext: emailItem\n  }\n}];"
+        "jsCode": "const emailItem = $('Normalizar correo Kingston').first().json;\nconst aiItem = $input.first().json;\nconst raw =\n  aiItem.choices?.[0]?.message?.content ??\n  aiItem.json ??\n  aiItem.output ??\n  aiItem.response ??\n  aiItem.result ??\n  aiItem.message?.content ??\n  aiItem.text ??\n  aiItem.content ??\n  aiItem;\n\nlet parsed = raw;\nif (typeof raw === 'string') {\n  const cleaned = raw.replace(/^```json|^```|```$/gm, '').trim();\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(match ? match[0] : cleaned);\n}\n\nconst sourceText = [emailItem.text, emailItem.html].filter(Boolean).join('\\n\\n');\nconst compact = (value) => String(value ?? '').replace(/\\s+/g, ' ').trim();\nconst matchOne = (regex) => compact(sourceText.match(regex)?.[1] ?? '');\nconst normalizedLines = sourceText\n  .replace(/\\r/g, '')\n  .split('\\n')\n  .map((line) => compact(line))\n  .filter(Boolean);\nconst fieldByLabel = {};\nconst canonicalize = (label) =>\n  String(label ?? '')\n    .toLowerCase()\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '');\nfor (const line of normalizedLines) {\n  const match = line.match(/^(Caso#?|Nombre|CUIL#?|Direcci[oó]n|Barrio|Ciudad|Estado|Pais|Pa[ií]s|Postal|Tel[eé]fono|Correo|Notas)\\s*:\\s*(.*)$/i);\n  if (!match) continue;\n  fieldByLabel[canonicalize(match[1])] = compact(match[2]);\n}\nconst findQuantityAndSku = (label) => {\n  const exact = sourceText.match(new RegExp(label + String.raw`\\s*:\\s*\\((\\d+)\\)\\s*([A-Z0-9./_-]+)`, 'i'));\n  if (exact) {\n    return { quantity: Number(exact[1]), sku: compact(exact[2]) };\n  }\n  const loose = sourceText.match(new RegExp(label + String.raw`\\s*:\\s*([A-Z0-9./_-]+)`, 'i'));\n  return { quantity: undefined, sku: compact(loose?.[1] ?? '') };\n};\nconst mailToMatch = sourceText.match(/mailto:([^\\s>]+)/i);\n\nconst partData = findQuantityAndSku('Parte#?');\nconst replacementData = findQuantityAndSku('Reemplazo');\nconst extracted = {\n  kingstonNumber: fieldByLabel['caso#'] || matchOne(/Caso#\\s*:\\s*([^\\n]+)/i),\n  contactName: fieldByLabel['nombre'] || matchOne(/Nombre\\s*:\\s*([^\\n]+)/i),\n  contactEmail: fieldByLabel['correo'] || compact(mailToMatch?.[1] ?? ''),\n  contactPhone: fieldByLabel['telefono'] || matchOne(/Tel[eé]fono\\s*:\\s*([^\\n]+)/i),\n  addressLine: fieldByLabel['direccion'] || matchOne(/Direcci[oó]n\\s*:\\s*([^\\n]+)/i),\n  neighborhood: fieldByLabel['barrio'] || matchOne(/Barrio\\s*:\\s*([^\\n]+)/i),\n  city: fieldByLabel['ciudad'] || matchOne(/Ciudad\\s*:\\s*([^\\n]+)/i),\n  province: fieldByLabel['estado'] || matchOne(/Estado\\s*:\\s*([^\\n]+)/i),\n  country: fieldByLabel['pais'] || matchOne(/Pa[ií]s\\s*:\\s*([^\\n]+)/i),\n  postalCode: fieldByLabel['postal'] || matchOne(/Postal\\s*:\\s*([^\\n]+)/i),\n  notes: fieldByLabel['notas'] || '',\n  quantity: partData.quantity ?? replacementData.quantity,\n  sku: partData.sku,\n  replacementSku: replacementData.sku\n};\n\nconst isValidEmail = (value) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(String(value ?? '').trim());\nconst normalizeText = (...values) => values.filter(Boolean).join(' ').toLowerCase();\nconst geographyHint = normalizeText(extracted.city, extracted.province, extracted.addressLine, emailItem.text);\nconst capitalHints = ['caba', 'capital federal', 'ciudad autonoma de buenos aires', 'ciudad autónoma de buenos aires'];\nconst zone = capitalHints.some((hint) => geographyHint.includes(hint)) ? 'Capital / AMBA' : 'Interior / Gran Buenos Aires';\nconst deliveryMode = zone === 'Capital / AMBA' ? 'Pickup' : 'Dispatch';\nconst priorities = ['Low', 'Medium', 'High', 'Critical'];\nconst priority = priorities.includes(parsed.priority) ? parsed.priority : 'Medium';\nconst quantity = Number.isFinite(extracted.quantity) && extracted.quantity > 0 ? extracted.quantity : (parsed.quantity > 0 ? parsed.quantity : 1);\nconst sku = extracted.sku || parsed.sku || extracted.replacementSku || 'SKU pendiente';\nconst replacementSku = extracted.replacementSku || parsed.replacementSku || sku;\nconst addressParts = [extracted.addressLine, extracted.neighborhood].filter((value) => value && value !== '-----');\nconst address = addressParts.join(', ') || compact(parsed.address) || 'Direccion pendiente de confirmar';\nconst city = extracted.city || compact(parsed.city) || 'Ciudad pendiente de confirmar';\nconst province = extracted.province || compact(parsed.province) || 'Provincia pendiente de confirmar';\nconst contactName = extracted.contactName || compact(parsed.contactName) || compact(parsed.clientName) || 'Cliente Kingston';\nconst clientName = compact(parsed.clientName) || contactName;\nconst contactEmail = isValidEmail(extracted.contactEmail)\n  ? extracted.contactEmail.replace(/<.*$/, '')\n  : isValidEmail(parsed.contactEmail)\n    ? parsed.contactEmail\n    : `pendiente-rma-${(extracted.kingstonNumber || parsed.kingstonNumber || 'sin-ticket').toLowerCase()}@kingestion.local`;\nconst contactPhone = extracted.contactPhone || compact(parsed.contactPhone) || 'Pendiente de confirmar';\nconst productDescription = compact(parsed.productDescription) || `Producto Kingston ${sku}`;\nconst failureDescription = extracted.notes || compact(parsed.failureDescription) || 'Pendiente de detalle informado por Kingston';\nconst nextAction = compact(parsed.nextAction) || (zone === 'Interior / Gran Buenos Aires'\n  ? 'Contactar al cliente para coordinar envio del producto fallado.'\n  : 'Contactar al cliente y validar disponibilidad para la gestion del reemplazo.');\nconst rawObservations = typeof parsed.observations === 'string' ? parsed.observations.trim() : '';\nconst cleanedObservations = rawObservations.replace(/Se infiri[oó] la zona[^.]*\\.\\s*/i, '').trim();\nconst attachmentNames = (emailItem.attachments ?? []).map((attachment) => attachment.name).join(' ');\nconst rawIntent = typeof parsed.mailIntent === 'string' ? parsed.mailIntent.trim().toLowerCase() : '';\nconst proofHintText = normalizeText(emailItem.subject, emailItem.text, attachmentNames, parsed.proofReason, rawIntent);\nconst heuristicProof = Boolean(emailItem.attachments?.length) && /(comprobante|transferencia|pago|reintegro|deposito|depósito|ticket|correo argentino|oca|andreani|captura|comision|envio|envío)/i.test(proofHintText);\nconst containsPaymentProof = parsed.containsPaymentProof === true || rawIntent === 'payment_proof' || rawIntent === 'mixed' || heuristicProof;\nconst mailIntent = ['new_case', 'follow_up', 'payment_proof', 'mixed'].includes(rawIntent)\n  ? rawIntent\n  : containsPaymentProof\n    ? 'payment_proof'\n    : 'new_case';\nconst attachments = (emailItem.attachments ?? []).map((attachment) => ({\n  ...attachment,\n  kind: containsPaymentProof ? 'proof' : attachment.kind\n}));\nconst proofReason = typeof parsed.proofReason === 'string' ? parsed.proofReason.trim() : '';\nconst automationNotes = [\n  'Zona normalizada por automatizacion: ' + zone + '.'\n];\nconst missingFields = [];\nif (!isValidEmail(extracted.contactEmail) && !isValidEmail(parsed.contactEmail)) missingFields.push('correo del end user');\nif (!extracted.contactPhone && !parsed.contactPhone) missingFields.push('telefono');\nif (!extracted.addressLine && !parsed.address) missingFields.push('direccion');\nif (!extracted.city && !parsed.city) missingFields.push('ciudad');\nif (!extracted.province && !parsed.province) missingFields.push('provincia');\nif (!extracted.notes && !parsed.failureDescription) missingFields.push('detalle de falla');\n\nif (missingFields.length) {\n  automationNotes.push('Campos faltantes completados con placeholders operativos: ' + missingFields.join(', ') + '.');\n}\n\nif (containsPaymentProof) {\n  automationNotes.push('IA detecto un posible comprobante de pago o reintegro en este correo.');\n}\n\nif (proofReason) {\n  automationNotes.push('Motivo IA: ' + proofReason);\n}\n\nconst observations = [cleanedObservations, ...automationNotes].filter(Boolean).join(' ');\nconst updateComment = containsPaymentProof\n  ? 'n8n detecto un comprobante de pago o reintegro y lo adjunto automaticamente al caso para revision interna.'\n  : 'n8n detecto un nuevo correo de autorizacion o seguimiento de Kingston y lo agrego al caso.';\n\nreturn [{\n  json: {\n    ...parsed,\n    kingstonNumber: extracted.kingstonNumber || parsed.kingstonNumber || 'SIN-TICKET',\n    clientName,\n    contactName,\n    contactEmail,\n    contactPhone,\n    zone,\n    deliveryMode,\n    priority,\n    address,\n    province,\n    city,\n    sku,\n    quantity,\n    productDescription,\n    failureDescription,\n    nextAction,\n    observations,\n    origin: 'Kingston email',\n    externalStatus: 'Informado',\n    replacementSku,\n    attachments,\n    primaryAttachment: attachments[0] ?? null,\n    containsPaymentProof,\n    mailIntent,\n    proofReason,\n    updateComment,\n    _emailContext: emailItem\n  }\n}];"
       }
     },
     {
@@ -109,13 +119,13 @@
       ],
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases?kingstonNumber=' + encodeURIComponent($json.kingstonNumber) + '&includeArchived=true' }}",
+        "url": "={{ 'https://kingestion.vercel.app' + '/api/integrations/n8n/cases?kingstonNumber=' + encodeURIComponent($json.kingstonNumber) + '&includeArchived=true' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "x-kingestion-api-key",
-              "value": "={{ $env.KINGESTION_AUTOMATION_API_KEY }}"
+              "value": "{{$env.KINGESTION_AUTOMATION_API_KEY}}"
             }
           ]
         },
@@ -164,20 +174,20 @@
         -160
       ],
       "parameters": {
-        "method": "POST",
-        "url": "={{ $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases' }}",
+        "method": "={{ $json.count > 0 ? 'PATCH' : 'POST' }}",
+        "url": "={{ 'https://kingestion.vercel.app' + ($json.count > 0 ? '/api/integrations/n8n/cases/' + $json.items[0].id : '/api/integrations/n8n/cases') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "x-kingestion-api-key",
-              "value": "={{ $env.KINGESTION_AUTOMATION_API_KEY }}"
+              "value": "{{$env.KINGESTION_AUTOMATION_API_KEY}}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($('Consolidar payload del caso').first().json) }}",
+        "jsonBody": "={{ JSON.stringify($json.count > 0 ? (() => {\n  const payload = $('Consolidar payload del caso').first().json;\n  const nextBody = {\n    comment: {\n      body: payload.updateComment,\n      internal: true\n    }\n  };\n\n  if (payload.primaryAttachment) {\n    nextBody.attachment = payload.primaryAttachment;\n  }\n\n  return nextBody;\n})() : $('Consolidar payload del caso').first().json) }}",
         "options": {}
       }
     },
@@ -192,19 +202,19 @@
       ],
       "parameters": {
         "method": "PATCH",
-        "url": "={{ $env.KINGESTION_BASE_URL + '/api/integrations/n8n/cases/' + $json.items[0].id }}",
+        "url": "={{ 'https://kingestion.vercel.app' + '/api/integrations/n8n/cases/' + $json.items[0].id }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "x-kingestion-api-key",
-              "value": "={{ $env.KINGESTION_AUTOMATION_API_KEY }}"
+              "value": "{{$env.KINGESTION_AUTOMATION_API_KEY}}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ comment: { body: 'n8n detecto un nuevo correo de autorizacion o seguimiento de Kingston y lo agrego al caso.', internal: true }, attachment: $('Consolidar payload del caso').first().json.attachments?.[0] }) }}",
+        "jsonBody": "={{ JSON.stringify({ comment: { body: $('Consolidar payload del caso').first().json.updateComment, internal: true }, attachment: $('Consolidar payload del caso').first().json.primaryAttachment }) }}",
         "options": {}
       }
     },
@@ -218,7 +228,7 @@
         -20
       ],
       "parameters": {
-        "jsCode": "const caseItem = $('Consolidar payload del caso').first().json;\nconst wasExisting = $('Existe caso previo').first().json.count > 0;\n\nconst emails = [\n  {\n    toEmail: $env.KINGSTON_RMA_TO ?? 'rma@kingston.com',\n    subject: `ANYX | Caso ${caseItem.kingstonNumber} recibido`,\n    text: wasExisting\n      ? `Se actualizo en Kingestion el caso ${caseItem.kingstonNumber}. Queda trazado para seguimiento interno.`\n      : `Se recibio y dio de alta el caso ${caseItem.kingstonNumber} en Kingestion para ${caseItem.clientName}.`\n  }\n];\n\nif (caseItem.zone === 'Interior / Gran Buenos Aires') {\n  emails.push({\n    toEmail: caseItem.contactEmail,\n    subject: `ANYX | Instrucciones de envio para ${caseItem.kingstonNumber}`,\n    text: `Hola ${caseItem.contactName}. Recibimos la autorizacion de Kingston para el caso ${caseItem.kingstonNumber}. Por favor envia el producto fallado a ANYX y responde este correo con el comprobante y los datos bancarios para el reintegro.`\n  });\n} else {\n  emails.push({\n    toEmail: caseItem.contactEmail,\n    subject: `ANYX | Caso ${caseItem.kingstonNumber} en validacion`,\n    text: `Hola ${caseItem.contactName}. Recibimos la autorizacion de Kingston para el caso ${caseItem.kingstonNumber}. El equipo de ANYX ya esta validando stock y proximo paso. Te vamos a mantener informado desde Kingestion.`\n  });\n}\n\nreturn emails.map((email) => ({ json: email }));"
+        "jsCode": "const caseItem = $('Consolidar payload del caso').first().json;\nconst searchResult = $('Buscar caso por ticket Kingston').first().json;\nconst wasExisting = searchResult.count > 0;\nconst existingCase = searchResult.items?.[0] ?? null;\nconst emailContext = caseItem._emailContext ?? {};\n\nconst extractEmail = (value) => {\n  const raw = String(value ?? '').trim();\n  if (!raw) return '';\n  const match = raw.match(/<([^>]+)>/);\n  return (match?.[1] ?? raw).trim();\n};\n\nconst buildPilotEnvelope = ({ destinationEmail, subject, text }) => ({\n  toEmail: 'tsanjuan@innovexa.com.ar',\n  originalToEmail: destinationEmail,\n  subject: `[PILOTO] ${subject}`,\n  text: `${text}\\n\\nDestino real previsto: ${destinationEmail}`\n});\n\nconst signature = 'Saludos cordiales,\\n\\nEquipo de RMA ANYX\\nconsultaskingston@anyx.com.ar\\nTel: 4815-4614';\nconst senderEmail = extractEmail(emailContext.from).toLowerCase();\nconst originalKingston = senderEmail || 'rma@kingston.com';\nconst contactName = existingCase?.contactName || caseItem.contactName || 'cliente';\nconst pickupAddress = 'Avenida San Isidro Labrador 4471 (C.A.B.A.)';\nconst internalDomains = ['@anyx.com.ar', '@innovexa.com.ar', '@kingston.com'];\nconst isInternalSender = internalDomains.some((domain) => senderEmail.endsWith(domain));\n\nif (wasExisting) {\n  const replyDestination = senderEmail || (existingCase?.contactEmail ?? '').trim();\n  const currentStatus = existingCase?.externalStatus ?? caseItem.externalStatus;\n  const statusReplyMap = {\n    'Informado': `Su caso esta recibido y en proceso de solucion. Tiempo aproximado entre 5 y 45 dias habiles desde que recibio el primer mail informandole sobre el comienzo del tramite.\\n\\n${signature}`,\n    'Aviso de envio': `A la espera de recepcion del producto fallado enviado por Ud. Si aun no lo ha enviado por favor seguir las instrucciones enviadas en mail anterior. Muchas gracias.\\n\\n${signature}`,\n    'Producto recepcionado y en preparacion': `Hemos recibido su producto fallado y estamos en proceso de enviarle el cambio correspondiente en caso de contar con disponibilidad local. Tendra una actualizacion sobre su caso durante el transcurso de los proximos 10 dias habiles.\\n\\n${signature}`,\n    'Pedido deposito y etiquetado': `Producto en Anyx, en preparacion. En los proximos 5 dias habiles tendra novedades sobre el estado de su caso.\\n\\n${signature}`,\n    'Pedido Kingston': `El producto nuevo necesario para cumplir con el cambio en gtia. NO se encuentra disponible en Argentina, por lo que ha sido solicitado a KINGSTON en EEUU. Le avisaremos por este medio cuando arribe a la Argentina en un plazo aproximado de 10 dias habiles.\\n\\n${signature}`,\n    'Producto enviado': `Su reemplazo ha sido enviado. Corrobore con el Expreso el estado de su envio, los datos de su envio han sido enviados por e-mail.\\n\\n${signature}`,\n    'Producto listo para retiro': `El producto/s esta/n listo/s para su retiro. Podra pasar a realizar el cambio los dias Lunes, Miercoles o Viernes (EXCEPTO FERIADOS) de 9 a 17 hs por ${pickupAddress}. Por favor recuerde traer el/los producto/s fallado/s.\\n\\n${signature}`,\n    'Realizado': `Producto cambiado con exito. RMA finalizado. Gracias por confiar en KINGSTON.\\n\\n${signature}`,\n    'Vencido': `Caso VENCIDO ya que ha pasado el tiempo estipulado para obtener una respuesta de su parte. Si aun desea tramitar el cambio debera volver a generar una nueva solicitud de RMA ante KINGSTON.\\n\\n${signature}`,\n    'Cerrado': `Caso CERRADO por parte de KINGSTON. Cualquier consulta comunicarse nuevamente con KINGSTON.\\n\\n${signature}`,\n    'OV creada': null,\n    'Liberar mercaderia': `Producto en preparacion. En los proximos 5 dias habiles tendra novedades sobre el estado de su caso.\\n\\n${signature}`,\n    'Pendiente de recibirlo': `Su caso continua en gestion operativa a la espera de la siguiente confirmacion interna. Le avisaremos por este medio apenas tengamos novedades.\\n\\n${signature}`,\n    'Pedido guia': `Su caso se encuentra en coordinacion final de despacho. Apenas este disponible la guia definitiva se la informaremos por este medio.\\n\\n${signature}`\n  };\n\n  if (!replyDestination || isInternalSender) {\n    return [];\n  }\n\n  const replyText = statusReplyMap[currentStatus] ?? null;\n  if (!replyText) {\n    return [];\n  }\n\n  return [{\n    json: buildPilotEnvelope({\n      destinationEmail: replyDestination,\n      subject: `ANYX | Estado de su caso ${existingCase?.kingstonNumber ?? caseItem.kingstonNumber}`,\n      text: replyText\n    })\n  }];\n}\n\nconst emails = [\n  buildPilotEnvelope({\n    destinationEmail: originalKingston,\n    subject: `ANYX | Caso ${caseItem.kingstonNumber} recibido`,\n    text: `Se recibio y dio de alta el caso ${caseItem.kingstonNumber} en Kingestion para ${caseItem.clientName}.`\n  })\n];\n\nconst customerText = caseItem.zone === 'Interior / Gran Buenos Aires'\n  ? `Hola ${contactName}. Recibimos la autorizacion de Kingston para el caso ${caseItem.kingstonNumber}. Por favor envia el producto fallado a ANYX y responde este correo con el comprobante y los datos bancarios para el reintegro.`\n  : `Hola ${contactName}. Recibimos la autorizacion de Kingston para el caso ${caseItem.kingstonNumber}. El equipo de ANYX ya esta validando stock y proximo paso. Te vamos a mantener informado desde Kingestion.`;\n\nif (caseItem.contactEmail) {\n  emails.push(\n    buildPilotEnvelope({\n      destinationEmail: caseItem.contactEmail,\n      subject: `ANYX | ${caseItem.zone === 'Interior / Gran Buenos Aires' ? 'Instrucciones de envio' : 'Caso en validacion'} para ${caseItem.kingstonNumber}`,\n      text: customerText\n    })\n  );\n}\n\nreturn emails.map((email) => ({ json: email }));"
       }
     },
     {
@@ -231,7 +241,7 @@
         -20
       ],
       "parameters": {
-        "fromEmail": "={{ $env.KINGESTION_FROM_EMAIL }}",
+        "fromEmail": "={{ 'tsanjuan@innovexa.com.ar' }}",
         "toEmail": "={{ $json.toEmail }}",
         "subject": "={{ $json.subject }}",
         "emailFormat": "text",
@@ -239,6 +249,50 @@
         "options": {
           "appendAttribution": false
         }
+      },
+      "webhookId": "abbf2a69-af78-4916-a2b2-23f077db224b",
+      "credentials": {
+        "smtp": {
+          "id": "I8A8psqpaDqW2ll7",
+          "name": "Kingestion SMTP Innovexa"
+        }
+      }
+    },
+    {
+      "id": "13",
+      "name": "Consultar control cloud",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -220,
+        -220
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://kingestion.vercel.app' + '/api/integrations/n8n/control/kingston-rma' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-kingestion-api-key",
+              "value": "{{$env.KINGESTION_AUTOMATION_API_KEY}}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "14",
+      "name": "Continuar si piloto activo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        -220
+      ],
+      "parameters": {
+        "jsCode": "const control = $input.first().json;\n\nif (control.control?.paused) {\n  return [];\n}\n\nreturn [{\n  json: {\n    ...$('Normalizar correo Kingston').first().json,\n    _automationControl: control\n  }\n}];"
       }
     }
   ],
@@ -277,17 +331,6 @@
         ]
       ]
     },
-    "Normalizar correo Kingston": {
-      "main": [
-        [
-          {
-            "node": "IA interpreta autorizacion",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "IA interpreta autorizacion": {
       "main": [
         [
@@ -314,7 +357,7 @@
       "main": [
         [
           {
-            "node": "Existe caso previo",
+            "node": "Crear caso en Kingestion",
             "type": "main",
             "index": 0
           }
@@ -325,14 +368,14 @@
       "main": [
         [
           {
-            "node": "Actualizar caso existente",
+            "node": "Crear caso en Kingestion",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Crear caso en Kingestion",
+            "node": "Actualizar caso existente",
             "type": "main",
             "index": 0
           }
@@ -371,17 +414,50 @@
           }
         ]
       ]
+    },
+    "Normalizar correo Kingston": {
+      "main": [
+        [
+          {
+            "node": "Consultar control cloud",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar control cloud": {
+      "main": [
+        [
+          {
+            "node": "Continuar si piloto activo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continuar si piloto activo": {
+      "main": [
+        [
+          {
+            "node": "IA interpreta autorizacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "timezone": "America/Argentina/Buenos_Aires"
   },
-  "versionId": "eb828349-e96f-4907-a9e6-4e36065d8112",
-  "id": "21f2e78d97434b76",
+  "versionId": "50cbcf01-f64d-4fc5-b592-6efb15973c55",
+  "id": "JxkyxD7pXvMtRG3z",
   "meta": {
-    "templateCredsSetupCompleted": false,
+    "templateCredsSetupCompleted": true,
     "instanceId": "kingestion-n8n-pack"
   },
   "tags": []
